@@ -113,12 +113,16 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03
 td.wrap{white-space:normal;min-width:120px}
 .muted{color:var(--muted)}
 .hint{font-size:13px;color:var(--muted);margin:6px 0 0}
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(6,1fr);
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(5,1fr);
   background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 .tabs button{border:0;background:none;padding:8px 2px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;
   font-size:11px;color:var(--muted);cursor:pointer}
 .tabs button.active{color:var(--primary);font-weight:700}
 .tabs svg{width:24px;height:24px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-bottom:14px}
+.seg button{border:0;background:none;border-radius:9px;padding:10px 6px;font-weight:600;color:var(--muted);cursor:pointer}
+.seg button.active{background:var(--primary);color:#fff}
+@media (prefers-color-scheme: dark){.seg button.active{color:#0b1220}}
 .cal-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 10px}
 .cal-nav b{font-size:17px}
 .cal-nav .btn{min-width:48px;font-size:22px;line-height:1}
@@ -132,6 +136,7 @@ td.wrap{white-space:normal;min-width:120px}
 .cal-day.future .n,.cal-day.nodata .n,.cal-day.off .n{color:var(--muted)}
 .dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
 .dot.full{background:var(--c-full)}.dot.late{background:var(--c-late)}.dot.half{background:var(--c-half)}.dot.absent{background:var(--c-absent)}
+.dot.holiday{background:var(--primary)}.pill.holiday{background:var(--primary-2);color:var(--primary)}
 .dot.off{background:var(--muted);opacity:.4}.dot.pending{border:2px solid var(--c-full)}.dot.blank{visibility:hidden}
 .cal-legend{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 .cal-legend span{display:flex;align-items:center;gap:7px}
@@ -199,9 +204,15 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
 
   <!-- REGISTER -->
   <section id="v-register" class="view">
+    <div class="seg" role="tablist">
+      <button class="active" data-regmode="daily" role="tab">Daily register</button>
+      <button data-regmode="cal" role="tab">Employee calendar</button>
+    </div>
+    <div id="regDaily">
     <div class="card">
       <label for="regDate">Date</label>
       <input id="regDate" type="date">
+      <p class="hint" id="regHoliday" hidden></p>
     </div>
     <div class="stats">
       <div class="stat"><b id="stPresent">0</b><span>Present</span></div>
@@ -216,35 +227,35 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
         <tbody id="regBody"></tbody>
       </table></div>
     </div>
-  </section>
-
-  <!-- CALENDAR -->
-  <section id="v-calendar" class="view">
-    <div class="card">
-      <div class="field"><label for="calUser">Employee</label><select id="calUser"></select></div>
-      <div class="cal-nav">
-        <button class="btn sm" id="calPrev" aria-label="Previous month">‹</button>
-        <b id="calMonth"></b>
-        <button class="btn sm" id="calNext" aria-label="Next month">›</button>
-      </div>
-      <div class="cal-grid cal-head"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
-      <div class="cal-grid" id="calGrid"></div>
-      <div class="cal-legend">
-        <span><i class="dot full"></i>Full day (9+ hours)</span>
-        <span><i class="dot late"></i>Late punch (after 10 AM)</span>
-        <span><i class="dot half"></i>Half day (under 9 hours)</span>
-        <span><i class="dot absent"></i>No punch (absent)</span>
-        <span><i class="dot pending"></i>In office now</span>
-        <span><i class="dot off"></i>Sunday / weekly off</span>
-      </div>
     </div>
-    <div class="stats">
-      <div class="stat"><b id="cFull">0</b><span><i class="dot full"></i>Full</span></div>
-      <div class="stat"><b id="cLate">0</b><span><i class="dot late"></i>Late</span></div>
-      <div class="stat"><b id="cHalf">0</b><span><i class="dot half"></i>Half</span></div>
-      <div class="stat"><b id="cAbsent">0</b><span><i class="dot absent"></i>Absent</span></div>
+    <div id="regCal" hidden>
+      <div class="card">
+        <div class="field"><label for="calUser">Employee</label><select id="calUser"></select></div>
+        <div class="cal-nav">
+          <button class="btn sm" id="calPrev" aria-label="Previous month">‹</button>
+          <b id="calMonth"></b>
+          <button class="btn sm" id="calNext" aria-label="Next month">›</button>
+        </div>
+        <div class="cal-grid cal-head"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div class="cal-legend">
+          <span><i class="dot full"></i>Full day (9+ hours)</span>
+          <span><i class="dot late"></i>Late punch (after 10 AM)</span>
+          <span><i class="dot half"></i>Half day (under 9 hours)</span>
+          <span><i class="dot absent"></i>No punch (absent)</span>
+          <span><i class="dot pending"></i>In office now</span>
+          <span><i class="dot holiday"></i>Holiday</span>
+          <span><i class="dot off"></i>Weekend (Sat / Sun)</span>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><b id="cFull">0</b><span><i class="dot full"></i>Full</span></div>
+        <div class="stat"><b id="cLate">0</b><span><i class="dot late"></i>Late</span></div>
+        <div class="stat"><b id="cHalf">0</b><span><i class="dot half"></i>Half</span></div>
+        <div class="stat"><b id="cAbsent">0</b><span><i class="dot absent"></i>Absent</span></div>
+      </div>
+      <div class="card" id="calDetail" hidden></div>
     </div>
-    <div class="card" id="calDetail" hidden></div>
   </section>
 
   <!-- REPORTS -->
@@ -353,6 +364,18 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
       <p class="hint">Restoring merges the file with the data already on this phone. Nothing is deleted.</p>
     </div>
 
+    <div class="card">
+      <h2>Holidays <span id="holCount" class="badge">0</span></h2>
+      <p class="hint" style="margin:-6px 0 12px">Holidays and weekends (Saturday, Sunday) are not counted as absent. The list is shared with every phone through the cloud backup. Festival dates change every year, so please check them against the company holiday list.</p>
+      <div class="grid2">
+        <div class="field"><label for="holDate">Date</label><input id="holDate" type="date"></div>
+        <div class="field"><label for="holName">Holiday name</label><input id="holName" maxlength="40" placeholder="e.g. Diwali"></div>
+      </div>
+      <button class="btn primary block" type="button" id="holAdd">Add holiday</button>
+      <div class="field" style="margin:14px 0 4px"><label for="holYear">Show year</label><select id="holYear"></select></div>
+      <ul id="holList" class="list"></ul>
+    </div>
+
     <form class="card" id="pinForm" autocomplete="off">
       <h2>Admin PIN <span id="pinState" class="pill none">Off</span></h2>
       <p class="hint" style="margin:-6px 0 12px">When a PIN is set, it is needed to open Settings, delete or correct punches, and edit or remove employees. Punching and adding employees never need it.</p>
@@ -369,7 +392,6 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
 <nav class="tabs" id="tabs">
   <button data-view="punch" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Punch</button>
   <button data-view="register"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Register</button>
-  <button data-view="calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="8" cy="15" r="1.3" fill="currentColor"/><circle cx="12" cy="15" r="1.3" fill="currentColor"/><circle cx="16" cy="15" r="1.3" fill="currentColor"/></svg>Calendar</button>
   <button data-view="reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Reports</button>
   <button data-view="users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M19 8v6M16 11h6"/></svg>Users</button>
   <button data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
@@ -391,7 +413,7 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
 
 <script>
 'use strict';
-const APP_VERSION = '2026-09-24.8'; // bump on every release; shown in Settings
+const APP_VERSION = '2026-09-24.9'; // bump on every release; shown in Settings
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -424,10 +446,14 @@ const store = {
 // db.users: [{id,name,code,dept,mobile,updatedAt,deleted}]
 // db.punches: { 'YYYY-MM-DD': [{id,userId,name,code,dept,date,in,out,by,manualOut,updatedAt,deleted}] }
 let db = store.get(K_DATA, null) || { users: [], punches: {} };
+db.holidays ||= [];
 let cfg = Object.assign({ owner: 'vkgunjan', repo: 'punch-data', branch: 'main', folder: 'data', token: '', email: '', guard: '' }, store.get(K_CFG, {}));
 // dirty counters: which files still need to be uploaded to GitHub
 let dirty = Object.assign({ users: 0, months: {} }, store.get(K_DIRTY, {}));
 
+function seedHolidays() {
+  DEFAULT_HOLIDAYS.forEach(([date, name]) => { if (!db.holidays.some(h => h.id === date)) db.holidays.push({ id: date, date, name, updatedAt: 0 }); });
+}
 function save() { store.set(K_DATA, db); store.set(K_DIRTY, dirty); }
 function touchUsers() { dirty.users++; }
 function touchMonth(m) { dirty.months[m] = (dirty.months[m] || 0) + 1; }
@@ -468,7 +494,17 @@ function remarkOf(r) {
 /* ---------- attendance rules ---------- */
 const WORK_MINS = 9 * 60;          // less than this between punch in and out = half day
 const LATE_AFTER_MINS = 10 * 60;   // punching in after 10:00 AM = late
-const WEEKLY_OFF = [0];            // Sunday (0 = Sun … 6 = Sat)
+const WEEKLY_OFF = [0, 6];         // Sunday and Saturday (0 = Sun … 6 = Sat); a Saturday punch still counts
+// Common holidays, added once on every phone. Admin can add or remove holidays in Settings.
+// Festival dates follow the lunar calendar — verify them each year against the company holiday list.
+const DEFAULT_HOLIDAYS = [
+  ['2026-01-26', 'Republic Day'], ['2026-03-04', 'Holi'], ['2026-08-15', 'Independence Day'], ['2026-08-28', 'Raksha Bandhan'],
+  ['2026-09-04', 'Janmashtami'], ['2026-10-02', 'Gandhi Jayanti'], ['2026-10-20', 'Dussehra'], ['2026-11-08', 'Diwali'],
+  ['2026-12-25', 'Christmas'], ['2027-01-26', 'Republic Day'], ['2027-08-15', 'Independence Day'], ['2027-10-02', 'Gandhi Jayanti'],
+  ['2027-12-25', 'Christmas']
+];
+const activeHolidays = () => (db.holidays || []).filter(h => !h.deleted).sort((a, b) => a.date.localeCompare(b.date));
+const holidayOn = k => activeHolidays().find(h => h.date === k)?.name || '';
 const clockMins = iso => { const d = new Date(iso); return d.getHours() * 60 + d.getMinutes(); };
 
 function attendance(rec) {
@@ -507,6 +543,8 @@ function dayState(userId, k, start, user) {
     const a = attendance(e);
     return { kind: a.pending ? (a.late ? 'late' : 'pending') : a.half ? 'half' : a.late ? 'late' : 'full', a, e };
   }
+  const hol = holidayOn(k);
+  if (hol) return { kind: 'holiday', name: hol };
   if (WEEKLY_OFF.includes(parseKey(k).getDay())) return { kind: 'off' };
   const joined = user?.createdAt ? dateKey(new Date(user.createdAt)) : '';
   if (k < (joined > start ? joined : start)) return { kind: 'nodata' };
@@ -712,6 +750,9 @@ function renderRegister() {
   const open = recs.filter(r => !r.out);
   const inside = new Set(open.map(r => r.userId));
   const onBreak = isToday ? new Set(open.filter(openBreak).map(r => r.userId)) : new Set();
+  const hol = holidayOn(k), weekend = WEEKLY_OFF.includes(parseKey(k).getDay());
+  $('#regHoliday').hidden = !(hol || weekend);
+  $('#regHoliday').innerHTML = hol ? `<span class="pill holiday">Holiday</span> ${esc(hol)}` : weekend ? '<span class="pill none">Weekend</span> Not a working day' : '';
   $('#stPresent').textContent = people.size;
   $('#stInside').textContent = inside.size - onBreak.size;
   $('#stBreak').textContent = onBreak.size;
@@ -860,7 +901,7 @@ function buildWorkbookBlob() {
     ws['!cols'] = [12, 6, 10, 26, 16, 11, 11, 10, 12, 14, 48, 10, 10, 18, 24].map(w => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, ws, 'Punches');
     const ws2 = XLSX.utils.aoa_to_sheet([['Summary ' + reportTitle(from, to)],
-      [`Full day = ${WORK_MINS / 60}+ hours between punch in and out · Late = punch in after ${fmtTime(new Date(2000, 0, 1, 0, LATE_AFTER_MINS).toISOString())} · Absent = no punch on a working day (Sunday off)`],
+      [`Full day = ${WORK_MINS / 60}+ hours between punch in and out · Late = punch in after ${fmtTime(new Date(2000, 0, 1, 0, LATE_AFTER_MINS).toISOString())} · Absent = no punch on a working day (Mon–Fri, not a holiday)`],
       ['Emp Code', 'Name', 'Department', 'Days Present', 'Full Days', 'Late Days', 'Half Days', 'Absent Days', 'Total Hours',
       'Lunch Hours', 'Other Break Hours', 'Official Work Out Hours', 'Net Hours', 'Missing Punch Out'], ...sumRows]);
     ws2['!cols'] = [10, 26, 16, 12, 10, 10, 10, 12, 12, 12, 16, 20, 10, 16].map(w => ({ wch: w }));
@@ -919,8 +960,8 @@ $('#btnPrint').addEventListener('click', () => {
 
 /* ---------- CALENDAR (one employee, one month) ---------- */
 let calMonth = monthOf(dateKey()), calDay = null;
-const DOT = { full: 'full', late: 'late', half: 'half', absent: 'absent', off: 'off', pending: 'pending' };
-const KIND_TEXT = { full: 'Full day', late: 'Late punch', half: 'Half day', absent: 'No punch (absent)', off: 'Weekly off',
+const DOT = { full: 'full', late: 'late', half: 'half', absent: 'absent', off: 'off', pending: 'pending', holiday: 'holiday' };
+const KIND_TEXT = { full: 'Full day', late: 'Late punch', half: 'Half day', absent: 'No punch (absent)', off: 'Weekend', holiday: 'Holiday',
   pending: 'In office now', notyet: 'Not punched in yet', nodata: 'Before records started', future: '' };
 
 function renderCalendar() {
@@ -942,7 +983,7 @@ function renderCalendar() {
     if (st.a) { if (st.a.late) c.late++; if (!st.a.pending) st.a.half ? c.half++ : c.full++; }
     if (st.kind === 'absent') c.absent++;
     html += `<button class="cal-day ${st.kind}${k === today ? ' today' : ''}${k === calDay ? ' sel' : ''}" data-day="${k}"
-      aria-label="${fmtDate(k)} ${KIND_TEXT[st.kind]}"><span class="n">${d}</span><span class="dot ${DOT[st.kind] || 'blank'}"></span></button>`;
+      aria-label="${fmtDate(k)} ${esc(st.name || KIND_TEXT[st.kind])}" title="${esc(st.name || KIND_TEXT[st.kind])}"><span class="n">${d}</span><span class="dot ${DOT[st.kind] || 'blank'}"></span></button>`;
   }
   $('#calGrid').innerHTML = html;
   $('#cFull').textContent = c.full; $('#cLate').textContent = c.late; $('#cHalf').textContent = c.half; $('#cAbsent').textContent = c.absent;
@@ -953,9 +994,10 @@ function renderCalDetail(u, start) {
   const box = $('#calDetail');
   if (!u || !calDay || !calDay.startsWith(calMonth)) { box.hidden = true; return; }
   const st = dayState(u.id, calDay, start, u);
-  const title = `<h2>${esc(longDate(parseKey(calDay)))}</h2>`;
+  const hol = holidayOn(calDay);
+  const title = `<h2>${esc(longDate(parseKey(calDay)))}</h2>` + (hol && st.e ? `<p style="margin:-6px 0 8px"><span class="pill holiday">Holiday</span> ${esc(hol)}</p>` : '');
   if (!st.e) {
-    box.innerHTML = title + `<p class="muted" style="margin:0">${st.kind === 'absent' ? '<span class="pill absent">No punch</span> ' : ''}${esc(KIND_TEXT[st.kind] || 'Nothing recorded')}</p>`;
+    box.innerHTML = title + `<p class="muted" style="margin:0">${st.kind === 'absent' ? '<span class="pill absent">No punch</span> ' : st.kind === 'holiday' ? '<span class="pill holiday">Holiday</span> ' : ''}${esc(st.name || KIND_TEXT[st.kind] || 'Nothing recorded')}</p>`;
   } else {
     const e = st.e, recs = e.recs;
     box.innerHTML = title + `<p style="margin:0 0 8px">${recs.length === 1 ? statusPills(recs[0]) : ''} <span class="muted">${esc(attLabel(st.a))}</span></p>
@@ -980,9 +1022,17 @@ function shiftCalMonth(step) {
   calMonth = monthOf(dateKey(new Date(y, m - 1 + step, 1)));
   calDay = null; renderCalendar(); loadCalMonth();
 }
+let regMode = 'daily';
+function setRegMode(m) {
+  regMode = m;
+  $('#regDaily').hidden = m !== 'daily'; $('#regCal').hidden = m !== 'cal';
+  document.querySelectorAll('[data-regmode]').forEach(b => b.classList.toggle('active', b.dataset.regmode === m));
+  if (m === 'cal') { renderCalendar(); loadCalMonth(); }
+}
+document.querySelector('.seg').addEventListener('click', e => { const b = e.target.closest('[data-regmode]'); if (b) setRegMode(b.dataset.regmode); });
 function openCalendar(userId) {
   calMonth = monthOf(dateKey()); calDay = null;
-  showView('calendar').then(() => { $('#calUser').value = userId; renderCalendar(); });
+  showView('register').then(() => { setRegMode('cal'); $('#calUser').value = userId; renderCalendar(); });
 }
 $('#calPrev').addEventListener('click', () => shiftCalMonth(-1));
 $('#calNext').addEventListener('click', () => shiftCalMonth(1));
@@ -1187,10 +1237,10 @@ async function syncUsers() {
   for (let i = 0; i < 4; i++) {
     const snap = dirty.users;
     const { sha, data } = await ghGet('users.json');
-    if (data) db.users = mergeById(db.users, data.users);
+    if (data) { db.users = mergeById(db.users, data.users); db.holidays = mergeById(db.holidays, data.holidays); }
     if (!snap && data) return;
     if (!snap && !db.users.length) return;
-    if (await ghPut('users.json', { updated: new Date().toISOString(), users: db.users }, sha, `Update employees (${cfg.guard || 'guard app'})`)) {
+    if (await ghPut('users.json', { updated: new Date().toISOString(), users: db.users, holidays: db.holidays }, sha, `Update employees (${cfg.guard || 'guard app'})`)) {
       if (dirty.users === snap) dirty.users = 0;
       return;
     }
@@ -1301,11 +1351,46 @@ $('#bFile').addEventListener('change', async e => {
   try {
     const data = JSON.parse(await f.text());
     if (!Array.isArray(data.users) || typeof data.punches !== 'object') throw new Error('Not a punch backup file');
-    db.users = mergeById(db.users, data.users); mergeDays(data.punches);
+    db.users = mergeById(db.users, data.users); db.holidays = mergeById(db.holidays, data.holidays); mergeDays(data.punches);
     touchUsers(); Object.keys(data.punches).forEach(k => touchMonth(monthOf(k)));
     save(); renderAll(); scheduleSync(500);
     toast('Backup restored', 'ok');
   } catch (err) { toast('Restore failed: ' + err.message, 'err'); }
+});
+
+/* ---------- holidays (Settings is PIN-protected, so only the admin can change them) ---------- */
+function renderHolidays() {
+  const all = activeHolidays(), ySel = $('#holYear'), cur = ySel.value || String(new Date().getFullYear());
+  const years = [...new Set([...all.map(h => h.date.slice(0, 4)), String(new Date().getFullYear()), String(new Date().getFullYear() + 1)])].sort();
+  ySel.innerHTML = years.map(y => `<option>${y}</option>`).join('');
+  ySel.value = years.includes(cur) ? cur : years[0];
+  const list = all.filter(h => h.date.startsWith(ySel.value));
+  $('#holCount').textContent = list.length;
+  $('#holList').innerHTML = list.length ? list.map(h => `<li><div class="row" style="cursor:default">
+      <span class="grow"><span class="name">${esc(h.name)}</span><span class="sub">${esc(parseKey(h.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</span></span>
+      <button class="btn sm danger" data-hol-del="${h.id}" aria-label="Remove ${esc(h.name)}">✕</button></div></li>`).join('')
+    : '<li class="empty">No holidays for this year.</li>';
+}
+$('#holYear').addEventListener('change', renderHolidays);
+$('#holAdd').addEventListener('click', () => {
+  const date = $('#holDate').value, name = $('#holName').value.trim().replace(/\s+/g, ' ');
+  if (!date || !name) { toast('Enter a date and a holiday name', 'err'); return; }
+  const h = db.holidays.find(x => x.id === date);
+  if (h && !h.deleted && !confirm(`${fmtDate(date)} is already "${h.name}". Rename it to "${name}"?`)) return;
+  if (h) Object.assign(h, { name, deleted: false, updatedAt: Date.now() });
+  else db.holidays.push({ id: date, date, name, updatedAt: Date.now() });
+  touchUsers(); save();
+  $('#holDate').value = ''; $('#holName').value = '';
+  renderHolidays(); $('#holYear').value = date.slice(0, 4);
+  toast(`Holiday added: ${name}, ${fmtDate(date)}`, 'ok');
+  renderAll(); scheduleSync(500);
+});
+$('#holList').addEventListener('click', e => {
+  const b = e.target.closest('[data-hol-del]');
+  const h = b && db.holidays.find(x => x.id === b.dataset.holDel);
+  if (!h || !confirm(`Remove holiday "${h.name}" (${fmtDate(h.date)})? That day will count as a working day.`)) return;
+  h.deleted = true; h.updatedAt = Date.now();
+  touchUsers(); save(); renderAll(); scheduleSync(500);
 });
 
 /* ---------- admin PIN (stored only as a salted hash on this phone) ---------- */
@@ -1363,7 +1448,7 @@ async function showView(v) {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
   if (v === 'settings') fillCfg();
   if (v === 'reports') onRangeChange();
-  if (v === 'calendar') { renderCalendar(); loadCalMonth(); }
+  if (v === 'register' && regMode === 'cal') loadCalMonth();
   window.scrollTo(0, 0);
 }
 $('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) showView(b.dataset.view); });
@@ -1382,9 +1467,10 @@ function tick() {
 
 function renderAll() {
   $('#hdrDate').textContent = longDate(new Date());
-  renderResults(); renderSelected(); renderInside(); renderRegister(); renderUsers(); renderUserSelect(); renderReportPreview(); renderCalendar();
+  renderResults(); renderSelected(); renderInside(); renderRegister(); renderUsers(); renderUserSelect(); renderReportPreview(); renderCalendar(); renderHolidays();
 }
 
+seedHolidays(); save();
 $('#appVer').textContent = APP_VERSION;
 $('#regDate').value = dateKey();
 $('#rFrom').value = $('#rTo').value = dateKey();

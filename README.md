@@ -6,9 +6,10 @@ A mobile web app the security guard uses in place of the paper register to recor
 - **Attendance rules**: each employee gets **one punch in and one punch out per day**. If punch out was pressed by mistake, an admin can use **Undo punch out**, which needs the PIN.
   - **Full day** = 9 hours or more from punch in to punch out. Under 9 hours is a **Half day**, and the guard gets a warning before an early punch out.
   - **Late** = punching in after 10:00 AM.
-  - Sunday is the weekly off.
+  - The working week is **Monday to Friday**. Saturday and Sunday are weekends, so they're never counted as absent, but a Saturday punch is still recorded and shown.
+  - **Holidays** aren't counted as absent either. Common holidays for 2026 come preloaded. The admin can add or remove holidays in **Settings → Holidays** (PIN-protected), and the list is shared with every phone through the cloud backup. Festival dates change every year, so check them against the company holiday list.
   - These limits are set at the top of the script in `index.html` (`WORK_MINS`, `LATE_AFTER_MINS`, `WEEKLY_OFF`).
-- **Calendar**: a month view for one employee, with a coloured dot for each day. 🟢 full day · 🟡 late punch · 🟣 half day (under 9h) · 🔴 no punch (absent) · green ring = in office now · grey = Sunday. The counts of Full, Late, Half and Absent days are shown below, and you can tap a day to see its punch times, hours and breaks. Open it from the Calendar tab, or by tapping a name in **Users**.
+- **Employee calendar** (in the **Register** tab, next to *Daily register*): a month view for one employee, with a coloured dot for each day. 🟢 full day · 🟡 late punch · 🟣 half day (under 9h) · 🔴 no punch (absent) · green ring = in office now · 🔵 holiday · grey = weekend. The counts of Full, Late, Half and Absent days are shown below, and you can tap a day to see its punch times, hours and breaks. Open it from Register → Employee calendar, or by tapping a name in **Users**.
   - If a day is both late and short, it shows purple (half day), and the day's details say "Late + Half day".
   - Days before the app was in use, or before the employee was added, aren't counted as absent.
 - **Breaks**: while someone is inside, tap their name and choose **Lunch**, **Tea break**, **Personal** or **Official work** when they go out, then **Back IN** when they return. The Punch screen lists everyone "Out on break" with how long they've been away, each with a Back IN button. If someone leaves for the day while on a break, **Punch OUT** ends the break at the same time.
