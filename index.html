@@ -229,6 +229,15 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
       </div>
     </form>
     <div class="card">
+      <h2>Import many employees</h2>
+      <p class="hint" style="margin:-6px 0 12px">Upload a CSV file (in Excel: File → Save As → <b>CSV</b>) with the columns <b>Name, Emp Code, Department, Mobile</b>. Only Name is required. Anyone who already exists (same code, or same name with no code) is skipped.</p>
+      <div class="btn-row">
+        <button class="btn primary" type="button" id="csvImport">Import CSV</button>
+        <button class="btn" type="button" id="csvSample">Download sample</button>
+      </div>
+      <input type="file" id="csvFile" accept=".csv,text/csv,text/plain" hidden>
+    </div>
+    <div class="card">
       <h2>Employees <span id="userCount" class="badge">0</span></h2>
       <input id="userSearch" type="search" placeholder="Filter employees" style="margin-bottom:8px">
       <ul id="userList" class="list"></ul>
@@ -678,6 +687,64 @@ $('#userForm').addEventListener('submit', e => {
   resetUserForm(); renderAll(); scheduleSync(800);
 });
 $('#uCancel').addEventListener('click', resetUserForm);
+
+/* CSV import: accepts comma or semicolon files from Excel, with or without a header row */
+function parseCsv(text) {
+  text = text.replace(/^﻿/, '');
+  const first = text.split(/\r?\n/, 1)[0];
+  const delim = first.split(';').length > first.split(',').length ? ';' : ',';
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === delim) { row.push(f); f = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+    else f += c;
+  }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  return rows.map(r => r.map(x => x.trim().replace(/\s+/g, ' '))).filter(r => r.some(Boolean));
+}
+function csvToUsers(rows) {
+  const tests = [['name', /name/i], ['mobile', /mobile|phone|contact|cell/i], ['dept', /dep|dept|division|team/i], ['code', /code|\bid\b|emp|number|\bno\b/i]];
+  const colOf = { name: 0, code: 1, dept: 2, mobile: 3 }; // order used when there is no header row
+  if (rows.length && rows[0].some(h => /name/i.test(h))) {
+    Object.keys(colOf).forEach(k => colOf[k] = -1);
+    rows.shift().forEach((h, i) => {
+      if (/^(s|sr|sl)\.?\s*no\.?$|^#$/i.test(h)) return; // serial-number column
+      const t =tests.find(([k, re]) => colOf[k] === -1 && re.test(h)); if (t) colOf[t[0]] = i; });
+  }
+  const get = (r, k) => colOf[k] >= 0 ? (r[colOf[k]] || '') : '';
+  return rows.map(r => ({ name: get(r, 'name'), code: get(r, 'code'), dept: get(r, 'dept'), mobile: get(r, 'mobile') })).filter(u => u.name);
+}
+$('#csvSample').addEventListener('click', () => {
+  download(new Blob(['﻿Name,Emp Code,Department,Mobile\r\nRamesh Kumar,E101,Accounts,9876543210\r\nSita Sharma,E102,HR,\r\n'], { type: 'text/csv' }), 'employees-sample.csv');
+});
+$('#csvImport').addEventListener('click', () => $('#csvFile').click());
+$('#csvFile').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  let list;
+  try { list = csvToUsers(parseCsv(await file.text())); } catch (err) { toast('Could not read file: ' + err.message, 'err'); return; }
+  if (!list.length) { toast('No employee names found in this file', 'err'); return; }
+  const codes = new Set(activeUsers().map(u => (u.code || '').toLowerCase()).filter(Boolean));
+  const names = new Set(activeUsers().map(u => u.name.toLowerCase()));
+  const add = [], skipped = [];
+  list.forEach(u => {
+    const dup = u.code ? codes.has(u.code.toLowerCase()) : names.has(u.name.toLowerCase());
+    if (dup) { skipped.push(u.name); return; }
+    add.push(u);
+    if (u.code) codes.add(u.code.toLowerCase());
+    names.add(u.name.toLowerCase());
+  });
+  if (!add.length) { toast(`All ${skipped.length} employees already exist`, 'err'); return; }
+  const preview = add.slice(0, 5).map(u => '• ' + [u.name, u.code, u.dept].filter(Boolean).join(', ')).join('\n') + (add.length > 5 ? `\n…and ${add.length - 5} more` : '');
+  if (!confirm(`Add ${add.length} employee(s)?${skipped.length ? ` (${skipped.length} duplicates skipped)` : ''}\n\n${preview}`)) return;
+  const now = Date.now();
+  add.forEach((u, i) => db.users.push({ id: newId() + i, ...u, createdAt: new Date().toISOString(), updatedAt: now }));
+  touchUsers(); save(); renderAll(); scheduleSync(500);
+  toast(`${add.length} employees added`, 'ok');
+});
 $('#userSearch').addEventListener('input', renderUsers);
 $('#userList').addEventListener('click', async e => {
   const ed = e.target.closest('[data-edit]'), rm = e.target.closest('[data-remove]');
