@@ -6,7 +6,7 @@ A mobile web app the security guard uses in place of the paper register to recor
 - **Breaks**: while someone is inside, tap their name and choose **Lunch**, **Tea break**, **Personal** or **Official work** when they go out, then **Back IN** when they return. The Punch screen lists everyone "Out on break" with how long they've been away, each with a Back IN button. If someone leaves for the day while on a break, **Punch OUT** ends the break at the same time.
   - **Net hours** = punch in to punch out, minus lunch, tea and personal breaks. **Official work** counts as working time.
 - **Register**: shows the punches for any day, with Present, Inside and Left counts. You can delete a wrong entry, or enter a missed punch-out for an earlier day. A manually entered time is marked "edited".
-- **Reports**: pick a date range and an employee, or all employees. Then:
+- **Reports**: pick a date range, then narrow it to one **Department** (for example Pantry) and/or one employee if you want. Then:
   - **Download Excel** gives a `.xlsx` file with two sheets. *Punches* shows each punch with lunch, other breaks and official-work minutes, the break times, and total and net hours. *Summary* gives days present, total hours, lunch, break and official hours, and net hours per employee.
   - **Print** prints a register-style page with signature lines.
   - **Email / Share** opens the phone's share sheet with the Excel file attached, so you can send it with Gmail, WhatsApp and so on. On a desktop it downloads the file and opens an email draft.
@@ -81,6 +81,10 @@ Employee names and mobile numbers shouldn't be public, so:
 5. Generate it, copy the token, and paste it into the app under **Settings → Access token** → **Save settings**.
 
 The badge at the top right should turn green and show **Synced**. The token is saved only on that phone. Use a token that can only reach the data repo, and create a new one if the phone is lost.
+
+## Support staff (pantry, housekeeping, drivers)
+
+Add them in **Users** like any employee. The employee code is optional, so leave it blank if they don't have one. Put their role as the Department, for example `Pantry`. They then punch in and out and take breaks the same way as everyone else. Use **Official work** when they go out on an office errand, such as buying pantry supplies. In **Reports**, choose that Department to get an Excel file or printout for just them.
 
 ## Daily use for the guard
 

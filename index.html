@@ -200,6 +200,10 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
         <div class="field"><label for="rTo">To</label><input id="rTo" type="date"></div>
       </div>
       <div class="field">
+        <label for="rDept">Department</label>
+        <select id="rDept"><option value="">All departments</option></select>
+      </div>
+      <div class="field">
         <label for="rUser">Employee</label>
         <select id="rUser"><option value="">All employees</option></select>
       </div>
@@ -619,10 +623,10 @@ $('#regBody').addEventListener('click', async e => {
 function reportRows() {
   let from = $('#rFrom').value || dateKey(), to = $('#rTo').value || from;
   if (from > to) [from, to] = [to, from];
-  const uid = $('#rUser').value;
+  const uid = $('#rUser').value, dept = $('#rDept').value;
   const rows = [];
   Object.keys(db.punches).filter(k => k >= from && k <= to).sort().forEach(k => {
-    dayRecords(k).filter(r => !uid || r.userId === uid).sort((a, b) => a.name.localeCompare(b.name) || a.in.localeCompare(b.in))
+    dayRecords(k).filter(r => (!uid || r.userId === uid) && (!dept || deptOf(r) === dept)).sort((a, b) => a.name.localeCompare(b.name) || a.in.localeCompare(b.in))
       .forEach(r => rows.push(r));
   });
   return { from, to, rows };
@@ -638,10 +642,17 @@ function renderReportPreview() {
     : '<tr><td colspan="6" class="empty">No punches in this range.</td></tr>';
 }
 
+// Department of a punch: the employee's current department, or the one saved on the punch if they were removed.
+const deptOf = r => (userById(r.userId) || r).dept || '';
+
 function renderUserSelect() {
+  const dSel = $('#rDept'), dCur = dSel.value;
+  const depts = [...new Set([...activeUsers().map(u => u.dept), ...Object.values(db.punches).flat().map(deptOf)].filter(Boolean))].sort();
+  dSel.innerHTML = '<option value="">All departments</option>' + depts.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  dSel.value = depts.includes(dCur) ? dCur : '';
   const sel = $('#rUser'), cur = sel.value;
-  sel.innerHTML = '<option value="">All employees</option>' + activeUsers().map(u => `<option value="${u.id}">${esc(u.name)}${u.code ? ' (' + esc(u.code) + ')' : ''}</option>`).join('');
-  sel.value = cur;
+  sel.innerHTML = '<option value="">All employees</option>' + activeUsers().filter(u => !dSel.value || u.dept === dSel.value).map(u => `<option value="${u.id}">${esc(u.name)}${u.code ? ' (' + esc(u.code) + ')' : ''}</option>`).join('');
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
 }
 
 function setRange(kind) {
@@ -664,9 +675,13 @@ async function onRangeChange() {
 }
 
 ['#rFrom', '#rTo', '#rUser'].forEach(s => $(s).addEventListener('change', onRangeChange));
+$('#rDept').addEventListener('change', () => { renderUserSelect(); onRangeChange(); });
 document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => setRange(b.dataset.range)));
 
-function reportTitle(from, to) { return from === to ? `Attendance ${fmtDate(from)}` : `Attendance ${fmtDate(from)} to ${fmtDate(to)}`; }
+function reportTitle(from, to) {
+  const dept = $('#rDept').value;
+  return (from === to ? `Attendance ${fmtDate(from)}` : `Attendance ${fmtDate(from)} to ${fmtDate(to)}`) + (dept ? ` - ${dept}` : '');
+}
 
 function buildWorkbookBlob() {
   const { from, to, rows } = reportRows();
@@ -691,7 +706,7 @@ function buildWorkbookBlob() {
   });
   const sumRows = [...sum.values()].sort((a, b) => a.name.localeCompare(b.name))
     .map(s => [s.code, s.name, s.dept, s.days.size, hrs(s.mins), hrs(s.lunch), hrs(s.other), hrs(s.official), hrs(s.net), s.missing]);
-  const base = `${reportTitle(from, to).replace(/\s+/g, '_')}`;
+  const base = reportTitle(from, to).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '_'); // "CMD/MD Office" is not a valid file name
 
   if (window.XLSX) {
     const wb = XLSX.utils.book_new();
