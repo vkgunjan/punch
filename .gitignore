@@ -1,0 +1,5 @@
+# Employee lists / exports contain personal data - never publish them in this public repo
+*.csv
+*.xlsx
+*.xls
+punch-backup-*.json
