@@ -113,6 +113,8 @@ td.wrap{white-space:normal;min-width:120px}
 #toast.ok{background:var(--in)}#toast.err{background:var(--danger)}
 @media (prefers-color-scheme: dark){#toast.ok,#toast.err{color:#0b1220}}
 details summary{cursor:pointer;font-weight:600}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);padding:18px;width:min(340px,calc(100% - 32px))}
+dialog::backdrop{background:rgba(15,23,42,.55)}
 #printArea{display:none}
 @media print{
   body{background:#fff;color:#000;padding:0}
@@ -268,6 +270,17 @@ details summary{cursor:pointer;font-weight:600}
       <input type="file" id="bFile" accept="application/json,.json" hidden>
       <p class="hint">Restoring merges the file with the data already on this phone. Nothing is deleted.</p>
     </div>
+
+    <form class="card" id="pinForm" autocomplete="off">
+      <h2>Admin PIN <span id="pinState" class="pill none">Off</span></h2>
+      <p class="hint" style="margin:-6px 0 12px">When a PIN is set, it is needed to open Settings, delete or correct punches, and edit or remove employees. Punching and adding employees never need it.</p>
+      <div class="field"><label for="pinNew">New PIN (4–8 digits)</label>
+        <input id="pinNew" type="password" inputmode="numeric" pattern="\d{4,8}" maxlength="8" autocomplete="new-password"></div>
+      <div class="btn-row">
+        <button class="btn primary" type="submit">Set PIN</button>
+        <button class="btn danger" type="button" id="pinRemove">Remove PIN</button>
+      </div>
+    </form>
   </section>
 </main>
 
@@ -281,6 +294,17 @@ details summary{cursor:pointer;font-weight:600}
 
 <div id="toast"></div>
 <div id="printArea"></div>
+
+<dialog id="pinDlg">
+  <form method="dialog">
+    <h2 id="pinTitle">Enter admin PIN</h2>
+    <input id="pinInput" type="password" inputmode="numeric" maxlength="8" autocomplete="off">
+    <div class="btn-row" style="margin-top:14px;flex-direction:row-reverse">
+      <button class="btn primary" value="ok">OK</button>
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+    </div>
+  </form>
+</dialog>
 
 <script>
 'use strict';
@@ -465,11 +489,11 @@ function renderRegister() {
 }
 
 $('#regDate').addEventListener('change', renderRegister);
-$('#regBody').addEventListener('click', e => {
+$('#regBody').addEventListener('click', async e => {
   const k = $('#regDate').value || dateKey();
   const del = e.target.closest('[data-del]'), fix = e.target.closest('[data-fix]');
   const rec = (db.punches[k] || []).find(r => r.id === (del || fix)?.dataset[del ? 'del' : 'fix']);
-  if (!rec) return;
+  if (!rec || !(await requirePin())) return;
   if (del) {
     if (!confirm(`Delete this punch for ${rec.name} (${fmtDate(k)}, in ${fmtTime(rec.in)})?`)) return;
     rec.deleted = true;
@@ -655,8 +679,9 @@ $('#userForm').addEventListener('submit', e => {
 });
 $('#uCancel').addEventListener('click', resetUserForm);
 $('#userSearch').addEventListener('input', renderUsers);
-$('#userList').addEventListener('click', e => {
+$('#userList').addEventListener('click', async e => {
   const ed = e.target.closest('[data-edit]'), rm = e.target.closest('[data-remove]');
+  if (!(ed || rm) || !(await requirePin())) return;
   if (ed) {
     const u = userById(ed.dataset.edit);
     $('#uId').value = u.id; $('#uName').value = u.name; $('#uCode').value = u.code || '';
@@ -822,7 +847,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) sync
 
 /* ---------- SETTINGS ---------- */
 const cfgFields = { cGuard: 'guard', cEmail: 'email', cOwner: 'owner', cRepo: 'repo', cBranch: 'branch', cFolder: 'folder', cToken: 'token' };
-function fillCfg() { Object.entries(cfgFields).forEach(([id, k]) => $('#' + id).value = cfg[k] || ''); renderLastSync(); }
+function fillCfg() { Object.entries(cfgFields).forEach(([id, k]) => $('#' + id).value = cfg[k] || ''); renderLastSync(); renderPinState(); }
 $('#cfgForm').addEventListener('submit', e => {
   e.preventDefault();
   Object.entries(cfgFields).forEach(([id, k]) => cfg[k] = $('#' + id).value.trim());
@@ -851,8 +876,57 @@ $('#bFile').addEventListener('change', async e => {
   } catch (err) { toast('Restore failed: ' + err.message, 'err'); }
 });
 
+/* ---------- admin PIN (stored only as a salted hash on this phone) ---------- */
+const PIN_UNLOCK_MS = 5 * 60000;
+let unlockedUntil = 0;
+async function hashPin(salt, pin) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + ':' + pin));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function askPin(title) {
+  return new Promise(resolve => {
+    const d = $('#pinDlg');
+    $('#pinTitle').textContent = title; $('#pinInput').value = ''; d.returnValue = '';
+    d.onclose = () => resolve(d.returnValue === 'ok' ? $('#pinInput').value.trim() : null);
+    d.showModal(); $('#pinInput').focus();
+  });
+}
+// Resolves true when no PIN is set, the admin unlocked recently, or the right PIN is entered.
+async function requirePin() {
+  if (!cfg.pinHash || Date.now() < unlockedUntil) return true;
+  let title = 'Enter admin PIN';
+  for (;;) {
+    const pin = await askPin(title);
+    if (pin == null) return false;
+    if (await hashPin(cfg.pinSalt, pin) === cfg.pinHash) { unlockedUntil = Date.now() + PIN_UNLOCK_MS; return true; }
+    title = 'Wrong PIN — try again';
+  }
+}
+function renderPinState() {
+  const s = $('#pinState');
+  s.textContent = cfg.pinHash ? 'On' : 'Off'; s.className = 'pill ' + (cfg.pinHash ? 'in' : 'none');
+  $('#pinRemove').hidden = !cfg.pinHash;
+}
+$('#pinForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const pin = $('#pinNew').value.trim();
+  if (!/^\d{4,8}$/.test(pin)) { toast('PIN must be 4 to 8 digits', 'err'); return; }
+  if (await askPin('Enter the new PIN again') !== pin) { toast('PINs did not match', 'err'); return; }
+  cfg.pinSalt = newId();
+  cfg.pinHash = await hashPin(cfg.pinSalt, pin);
+  store.set(K_CFG, cfg); $('#pinNew').value = '';
+  unlockedUntil = Date.now() + PIN_UNLOCK_MS;
+  renderPinState(); toast('Admin PIN set', 'ok');
+});
+$('#pinRemove').addEventListener('click', async () => {
+  if (!(await requirePin()) || !confirm('Remove the admin PIN?')) return;
+  delete cfg.pinHash; delete cfg.pinSalt; store.set(K_CFG, cfg);
+  renderPinState(); toast('Admin PIN removed', 'ok');
+});
+
 /* ---------- navigation / clock ---------- */
-function showView(v) {
+async function showView(v) {
+  if (v === 'settings' && !(await requirePin())) return;
   document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.id === 'v-' + v));
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
   if (v === 'settings') fillCfg();

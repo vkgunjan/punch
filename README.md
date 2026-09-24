@@ -9,7 +9,8 @@ A mobile web app the security guard uses in place of the paper register to recor
   - **Print** prints a register-style page with signature lines.
   - **Email / Share** opens the phone's share sheet with the Excel file attached, so you can send it with Gmail, WhatsApp and so on. On a desktop it downloads the file and opens an email draft.
 - **Users**: add, edit or remove employees (name, code, department, mobile). Removing someone keeps their old punches in the reports.
-- **Settings**: set the guard name, the report email and the GitHub cloud backup, and make or restore a backup.
+- **Settings**: set the guard name, the report email and the GitHub cloud backup, make or restore a backup, and set the admin PIN.
+- **Admin PIN** (optional): once set, the PIN is needed to open Settings, delete or correct punches, and edit or remove employees. The guard can still punch in and out and add new employees without it. After the PIN is entered, it isn't asked again for 5 minutes. The PIN is saved only on that phone, as a hash. If it's forgotten, clear the site data in Chrome to reset the app, then sync to get the data back from GitHub.
 
 It also works offline. Punches are saved on the phone right away and upload once the internet is back.
 
@@ -55,6 +56,8 @@ git push -u origin main
 ```
 
 Next, on GitHub go to the repo → **Settings → Pages** → Source: *Deploy from a branch* → Branch: `main`, folder `/ (root)` → Save.
+> **The `punch` repo must be Public** for GitHub Pages to work on a free account (Settings → General → Danger Zone → Change visibility). The app code has no secrets in it. Keep the attendance data in a separate private repo, as described below.
+
 After a minute the app is live at **https://vkgunjan.github.io/punch/**.
 
 On the guard's phone, open that link in Chrome, then tap the ⋮ menu → **Add to Home screen**. It then opens like a normal app.
