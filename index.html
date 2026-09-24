@@ -284,6 +284,7 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
         <button class="btn" type="button" id="cSyncNow">Sync now</button>
       </div>
       <p class="hint" id="cLast"></p>
+      <p class="hint">App version: <b id="appVer"></b></p>
     </form>
 
     <div class="card">
@@ -333,6 +334,7 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
 
 <script>
 'use strict';
+const APP_VERSION = '2026-09-24.6'; // bump on every release; shown in Settings
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -908,7 +910,7 @@ async function ghError(r) {
 // A 404 on the repo means a wrong name OR a token without access to it — work out which.
 async function explainMissingRepo() {
   const full = `${cfg.owner}/${cfg.repo}`;
-  const me = await fetch('https://api.github.com/user', { headers: ghHeaders(), cache: 'no-store' });
+  const me = await fetch('https://api.github.com/user', { headers: ghHeaders(), cache: 'no-store', signal: AbortSignal.timeout(20000) });
   if (me.status === 401) return 'Token is invalid or expired — create a new one';
   const login = me.ok ? (await me.json()).login : '';
   const pub = await fetch(`https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`, { cache: 'no-store' });
@@ -916,10 +918,10 @@ async function explainMissingRepo() {
   return `The token${login ? ' of ' + login : ''} cannot see "${full}". Check the spelling, or on GitHub edit the token → Repository access → add ${cfg.repo}, with Contents: Read and write`;
 }
 async function ghGet(path) {
-  const r = await fetch(ghUrl(path) + '?ref=' + encodeURIComponent(cfg.branch || 'main'), { headers: ghHeaders(), cache: 'no-store' });
+  const r = await fetch(ghUrl(path) + '?ref=' + encodeURIComponent(cfg.branch || 'main'), { headers: ghHeaders(), cache: 'no-store', signal: AbortSignal.timeout(20000) });
   if (r.status === 404) {
     // 404 can mean "file not created yet" or "no access to repo" — tell them apart
-    const repo = await fetch(`https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`, { headers: ghHeaders(), cache: 'no-store' });
+    const repo = await fetch(`https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`, { headers: ghHeaders(), cache: 'no-store', signal: AbortSignal.timeout(20000) });
     if (repo.status === 404) throw new Error(await explainMissingRepo());
     if (!repo.ok) throw new Error(await ghError(repo));
     return { sha: null, data: null };
@@ -931,7 +933,7 @@ async function ghGet(path) {
 async function ghPut(path, data, sha, message) {
   const body = { message, content: b64encode(JSON.stringify(data, null, 1)), branch: cfg.branch || 'main' };
   if (sha) body.sha = sha;
-  const r = await fetch(ghUrl(path), { method: 'PUT', headers: { ...ghHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(ghUrl(path), { method: 'PUT', headers: { ...ghHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(20000) });
   if (r.status === 409 || r.status === 422) return false; // file changed meanwhile → re-read, merge, retry
   if (r.status === 404) throw new Error(await explainMissingRepo());
   if (!r.ok) throw new Error(await ghError(r));
@@ -994,7 +996,7 @@ async function sync() {
   if (!ghReady()) { updateSyncBadge(); return; }
   if (syncing) { syncAgain = true; return; }
   if (!navigator.onLine) { setBadge('offline', hasPending() ? 'Offline · pending' : 'Offline'); return; }
-  syncing = true; setBadge('syncing', 'Syncing…');
+  syncing = true; lastError = ''; setBadge('syncing', 'Syncing…');
   try {
     await syncUsers();
     const now = new Date();
@@ -1002,7 +1004,7 @@ async function sync() {
     for (const m of months) await syncMonth(m);
     save();
     store.set(K_LAST, Date.now());
-    updateSyncBadge();
+    lastError = '';
   } catch (e) {
     save();
     setBadge('error', 'Sync failed');
@@ -1010,6 +1012,7 @@ async function sync() {
     renderLastSync();
   } finally {
     syncing = false;
+    if (!lastError) updateSyncBadge(); // must run after syncing=false, or the badge stays on "Syncing…"
     renderAll();
     if (syncAgain) { syncAgain = false; scheduleSync(300); }
   }
@@ -1155,13 +1158,21 @@ function renderAll() {
   renderResults(); renderSelected(); renderInside(); renderRegister(); renderUsers(); renderUserSelect(); renderReportPreview();
 }
 
+$('#appVer').textContent = APP_VERSION;
 $('#regDate').value = dateKey();
 $('#rFrom').value = $('#rTo').value = dateKey();
 tick(); setInterval(tick, 1000);
 renderAll(); updateSyncBadge(); sync();
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // updateViaCache:'none' so a new sw.js is always noticed; when it takes over, reload once to show the new version
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    setInterval(() => reg.update().catch(() => {}), 30 * 60000);
+  }).catch(() => {});
 }
 </script>
 </body>
