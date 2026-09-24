@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d4ed8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Office Punch Register</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<style>
+:root{
+  --bg:#f1f5f9; --card:#ffffff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0;
+  --primary:#1d4ed8; --primary-2:#dbeafe;
+  --in:#15803d; --in-bg:#dcfce7; --out:#c2410c; --out-bg:#ffedd5;
+  --danger:#b91c1c; --danger-bg:#fee2e2; --warn:#a16207; --warn-bg:#fef9c3;
+  --shadow:0 1px 2px rgba(15,23,42,.06),0 2px 8px rgba(15,23,42,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0b1220; --card:#131c2e; --text:#e2e8f0; --muted:#94a3b8; --line:#23304a;
+    --primary:#60a5fa; --primary-2:#1e3a8a;
+    --in:#4ade80; --in-bg:#14532d; --out:#fb923c; --out-bg:#7c2d12;
+    --danger:#f87171; --danger-bg:#7f1d1d; --warn:#facc15; --warn-bg:#713f12;
+    --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding-bottom:calc(72px + env(safe-area-inset-bottom));-webkit-tap-highlight-color:transparent}
+button,input,select{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:10;background:var(--primary);color:#fff;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top))}
+@media (prefers-color-scheme: dark){.top{background:#172554}}
+.top h1{margin:0;font-size:18px;font-weight:700}
+.top small{opacity:.85;font-size:13px}
+.sync{display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);
+  color:#fff;border-radius:999px;padding:6px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
+.sync .dot{width:8px;height:8px;border-radius:50%;background:#cbd5e1}
+.sync[data-s=ok] .dot{background:#4ade80}.sync[data-s=pending] .dot,.sync[data-s=syncing] .dot{background:#facc15}
+.sync[data-s=error] .dot,.sync[data-s=offline] .dot{background:#f87171}
+.sync[data-s=syncing] .dot{animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.2}}
+main{max-width:680px;margin:0 auto;padding:16px}
+.view{display:none}.view.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:var(--shadow)}
+h2{font-size:16px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:0 0 6px}
+input,select{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-height:46px}
+input:focus,select:focus{outline:2px solid var(--primary);outline-offset:0;border-color:transparent}
+.field{margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:420px){.grid2{grid-template-columns:1fr}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:10px;padding:12px 16px;
+  min-height:46px;font-weight:600;cursor:pointer;background:var(--primary-2);color:var(--primary)}
+.btn.primary{background:var(--primary);color:#fff}
+@media (prefers-color-scheme: dark){.btn.primary{color:#0b1220}}
+.btn.block{width:100%}
+.btn.danger{background:var(--danger-bg);color:var(--danger)}
+.btn.sm{min-height:36px;padding:6px 10px;font-size:14px}
+#regBody td.wrap{min-width:0;white-space:normal}
+#regBody td:last-child{text-align:right}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-row{display:flex;flex-wrap:wrap;gap:10px}
+.btn-row .btn{flex:1 1 140px}
+.btn-row .btn.sm{flex:1 1 70px;font-size:13px}
+#rBody td.wrap{min-width:0}
+.clock{text-align:center}
+#clock{font-size:44px;font-weight:700;letter-spacing:1px;font-variant-numeric:tabular-nums}
+#clockDate{color:var(--muted)}
+.list{list-style:none;margin:0;padding:0}
+.list li+li{border-top:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:12px;width:100%;padding:10px 4px;background:none;border:0;text-align:left;cursor:pointer}
+.row:active{background:var(--bg)}
+.av{flex:0 0 40px;height:40px;border-radius:50%;background:var(--primary-2);color:var(--primary);display:grid;place-items:center;font-weight:700;font-size:14px}
+.grow{flex:1;min-width:0}
+.name{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub{display:block;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{font-size:12px;font-weight:600;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.pill.in{background:var(--in-bg);color:var(--in)}.pill.out{background:var(--out-bg);color:var(--out)}
+.pill.none{background:var(--bg);color:var(--muted)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.badge{background:var(--primary-2);color:var(--primary);border-radius:999px;font-size:12px;padding:2px 9px}
+.empty{color:var(--muted);text-align:center;padding:18px 8px;font-size:14px}
+#selectedCard{border:2px solid var(--primary)}
+.sel-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.sel-head .av{flex-basis:52px;height:52px;font-size:18px}
+.sel-name{font-size:20px;font-weight:700}
+.act{width:100%;min-height:64px;font-size:20px;border-radius:12px}
+.act.in{background:var(--in);color:#fff}.act.out{background:var(--out);color:#fff}
+@media (prefers-color-scheme: dark){.act.in,.act.out{color:#0b1220}}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+.stat b{display:block;font-size:24px}.stat span{font-size:12px;color:var(--muted)}
+.tbl-wrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:9px 4px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+td.wrap{white-space:normal;min-width:120px}
+.muted{color:var(--muted)}
+.hint{font-size:13px;color:var(--muted);margin:6px 0 0}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(5,1fr);
+  background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{border:0;background:none;padding:8px 2px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;
+  font-size:11px;color:var(--muted);cursor:pointer}
+.tabs button.active{color:var(--primary);font-weight:700}
+.tabs svg{width:24px;height:24px}
+#toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+  opacity:0;pointer-events:none;transition:.25s;background:#0f172a;color:#fff;padding:12px 18px;border-radius:12px;
+  max-width:calc(100% - 32px);font-weight:600;z-index:30;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{background:var(--in)}#toast.err{background:var(--danger)}
+@media (prefers-color-scheme: dark){#toast.ok,#toast.err{color:#0b1220}}
+details summary{cursor:pointer;font-weight:600}
+#printArea{display:none}
+@media print{
+  body{background:#fff;color:#000;padding:0}
+  body>*:not(#printArea){display:none!important}
+  #printArea{display:block;font:12px/1.4 Arial,sans-serif}
+  #printArea h1{font-size:18px;margin:0 0 4px}
+  #printArea table{font-size:11px}
+  #printArea th,#printArea td{border:1px solid #000;padding:5px;color:#000;white-space:nowrap}
+  #printArea .sign{display:flex;justify-content:space-between;margin-top:40px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Office Punch Register</h1>
+    <small id="hdrDate"></small>
+  </div>
+  <button id="syncBtn" class="sync" data-s="local" title="Tap to sync now"><span class="dot"></span><span id="syncText">On this device</span></button>
+</header>
+
+<main>
+  <!-- PUNCH -->
+  <section id="v-punch" class="view active">
+    <div class="card clock">
+      <div id="clock">--:--:--</div>
+      <div id="clockDate"></div>
+    </div>
+
+    <div class="card" id="selectedCard" hidden></div>
+
+    <div class="card">
+      <label for="search">Search employee</label>
+      <input id="search" type="search" placeholder="Type name, code or department" autocomplete="off">
+      <ul id="results" class="list" style="margin-top:8px;max-height:360px;overflow:auto"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Inside now <span id="insideCount" class="badge">0</span></h2>
+      <ul id="insideList" class="list"></ul>
+    </div>
+  </section>
+
+  <!-- REGISTER -->
+  <section id="v-register" class="view">
+    <div class="card">
+      <label for="regDate">Date</label>
+      <input id="regDate" type="date">
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="stPresent">0</b><span>Present</span></div>
+      <div class="stat"><b id="stInside">0</b><span>Inside</span></div>
+      <div class="stat"><b id="stLeft">0</b><span>Left</span></div>
+    </div>
+    <div class="card">
+      <h2>Punch register</h2>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Name</th><th>In</th><th>Out</th><th>Hours</th><th></th></tr></thead>
+        <tbody id="regBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- REPORTS -->
+  <section id="v-reports" class="view">
+    <div class="card">
+      <h2>Report</h2>
+      <div class="grid2">
+        <div class="field"><label for="rFrom">From</label><input id="rFrom" type="date"></div>
+        <div class="field"><label for="rTo">To</label><input id="rTo" type="date"></div>
+      </div>
+      <div class="field">
+        <label for="rUser">Employee</label>
+        <select id="rUser"><option value="">All employees</option></select>
+      </div>
+      <div class="btn-row" style="margin-bottom:10px">
+        <button class="btn sm" data-range="today">Today</button>
+        <button class="btn sm" data-range="yesterday">Yesterday</button>
+        <button class="btn sm" data-range="week">This week</button>
+        <button class="btn sm" data-range="month">This month</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="btnExcel">Download Excel</button>
+        <button class="btn" id="btnPrint">Print</button>
+        <button class="btn" id="btnShare">Email / Share</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Preview <span id="rCount" class="badge">0</span></h2>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Date</th><th>Name</th><th>In</th><th>Out</th><th>Hours</th></tr></thead>
+        <tbody id="rBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- USERS -->
+  <section id="v-users" class="view">
+    <form class="card" id="userForm" autocomplete="off">
+      <h2 id="userFormTitle">Add new employee</h2>
+      <input type="hidden" id="uId">
+      <div class="field"><label for="uName">Full name *</label><input id="uName" required maxlength="80"></div>
+      <div class="grid2">
+        <div class="field"><label for="uCode">Employee code</label><input id="uCode" maxlength="30"></div>
+        <div class="field"><label for="uMobile">Mobile</label><input id="uMobile" type="tel" inputmode="tel" maxlength="15"></div>
+      </div>
+      <div class="field"><label for="uDept">Department</label><input id="uDept" maxlength="60" list="deptList"><datalist id="deptList"></datalist></div>
+      <div class="btn-row">
+        <button class="btn primary" type="submit" id="uSave">Save employee</button>
+        <button class="btn" type="button" id="uCancel" hidden>Cancel edit</button>
+      </div>
+    </form>
+    <div class="card">
+      <h2>Employees <span id="userCount" class="badge">0</span></h2>
+      <input id="userSearch" type="search" placeholder="Filter employees" style="margin-bottom:8px">
+      <ul id="userList" class="list"></ul>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="v-settings" class="view">
+    <form class="card" id="cfgForm" autocomplete="off">
+      <h2>General</h2>
+      <div class="field"><label for="cGuard">Guard / gate name</label><input id="cGuard" placeholder="e.g. Main Gate - Ramesh"></div>
+      <div class="field"><label for="cEmail">Report email (for sharing)</label><input id="cEmail" type="email" placeholder="hr@company.com"></div>
+
+      <h2 style="margin-top:18px">Cloud backup on GitHub</h2>
+      <p class="hint" style="margin:-6px 0 12px">Every punch is saved on this phone right away. With a GitHub token, it is also saved as JSON files in your repo so the data is safe and the same on every device.</p>
+      <div class="grid2">
+        <div class="field"><label for="cOwner">GitHub owner</label><input id="cOwner" placeholder="vkgunjan"></div>
+        <div class="field"><label for="cRepo">Data repository</label><input id="cRepo" placeholder="punch"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="cBranch">Branch</label><input id="cBranch" placeholder="main"></div>
+        <div class="field"><label for="cFolder">Folder</label><input id="cFolder" placeholder="data"></div>
+      </div>
+      <div class="field"><label for="cToken">Access token</label><input id="cToken" type="password" placeholder="github_pat_..."></div>
+      <p class="hint">Create a <b>fine-grained token</b> at GitHub → Settings → Developer settings, give it access to this one repository only, with <b>Contents: Read and write</b>. See README for the steps.</p>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn primary" type="submit">Save settings</button>
+        <button class="btn" type="button" id="cSyncNow">Sync now</button>
+      </div>
+      <p class="hint" id="cLast"></p>
+    </form>
+
+    <div class="card">
+      <h2>Backup on this phone</h2>
+      <div class="btn-row">
+        <button class="btn" id="bExport">Download backup (JSON)</button>
+        <button class="btn" id="bImport">Restore from backup</button>
+      </div>
+      <input type="file" id="bFile" accept="application/json,.json" hidden>
+      <p class="hint">Restoring merges the file with the data already on this phone. Nothing is deleted.</p>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button data-view="punch" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Punch</button>
+  <button data-view="register"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Register</button>
+  <button data-view="reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Reports</button>
+  <button data-view="users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M19 8v6M16 11h6"/></svg>Users</button>
+  <button data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
+</nav>
+
+<div id="toast"></div>
+<div id="printArea"></div>
+
+<script>
+'use strict';
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2, '0');
+const dateKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseKey = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+const monthOf = k => k.slice(0, 7);
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+const fmtDate = k => { const [y, m, d] = k.split('-'); return `${d}-${m}-${y}`; };
+const longDate = d => d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const minsBetween = (a, b) => (a && b) ? Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000)) : null;
+const fmtMins = m => m == null ? '' : `${Math.floor(m / 60)}h ${pad(m % 60)}m`;
+const initials = n => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+
+let toastTimer;
+function toast(msg, kind = '') {
+  const t = $('#toast');
+  t.textContent = msg; t.className = 'show ' + kind;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = kind, 2600);
+}
+
+/* ---------- storage ---------- */
+const K_DATA = 'punch.data.v1', K_CFG = 'punch.cfg.v1', K_DIRTY = 'punch.dirty.v1', K_LAST = 'punch.lastsync.v1';
+const store = {
+  get(k, def) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { toast('Could not save on this phone: ' + e.message, 'err'); return false; } }
+};
+// db.users: [{id,name,code,dept,mobile,updatedAt,deleted}]
+// db.punches: { 'YYYY-MM-DD': [{id,userId,name,code,dept,date,in,out,by,manualOut,updatedAt,deleted}] }
+let db = store.get(K_DATA, null) || { users: [], punches: {} };
+let cfg = Object.assign({ owner: 'vkgunjan', repo: 'punch', branch: 'main', folder: 'data', token: '', email: '', guard: '' }, store.get(K_CFG, {}));
+// dirty counters: which files still need to be uploaded to GitHub
+let dirty = Object.assign({ users: 0, months: {} }, store.get(K_DIRTY, {}));
+
+function save() { store.set(K_DATA, db); store.set(K_DIRTY, dirty); }
+function touchUsers() { dirty.users++; }
+function touchMonth(m) { dirty.months[m] = (dirty.months[m] || 0) + 1; }
+function hasPending() { return dirty.users > 0 || Object.keys(dirty.months).length > 0; }
+
+const activeUsers = () => db.users.filter(u => !u.deleted).sort((a, b) => a.name.localeCompare(b.name));
+const userById = id => db.users.find(u => u.id === id);
+const dayRecords = k => (db.punches[k] || []).filter(r => !r.deleted);
+
+function statusOf(userId) {
+  const recs = dayRecords(dateKey()).filter(r => r.userId === userId);
+  const open = recs.find(r => !r.out);
+  if (open) return { state: 'in', rec: open };
+  if (recs.length) return { state: 'out', rec: recs[recs.length - 1] };
+  return { state: 'none' };
+}
+
+/* ---------- punch actions ---------- */
+function punchIn(userId) {
+  const u = userById(userId);
+  if (!u || u.deleted) return;
+  if (statusOf(userId).state === 'in') { toast(`${u.name} is already punched in`, 'err'); return; }
+  const now = new Date(), k = dateKey(now);
+  (db.punches[k] ||= []).push({
+    id: newId(), userId: u.id, name: u.name, code: u.code || '', dept: u.dept || '',
+    date: k, in: now.toISOString(), out: null, by: cfg.guard || '', updatedAt: Date.now()
+  });
+  touchMonth(monthOf(k)); save();
+  toast(`${u.name} punched IN at ${fmtTime(now.toISOString())}`, 'ok');
+  afterChange();
+}
+
+function punchOut(recId, date) {
+  const rec = (db.punches[date] || []).find(r => r.id === recId);
+  if (!rec || rec.out) return;
+  rec.out = new Date().toISOString();
+  rec.updatedAt = Date.now();
+  touchMonth(monthOf(date)); save();
+  toast(`${rec.name} punched OUT at ${fmtTime(rec.out)}`, 'ok');
+  afterChange();
+}
+
+function afterChange() {
+  selectedId = null;
+  $('#search').value = '';
+  renderAll();
+  scheduleSync(800);
+}
+
+/* ---------- PUNCH view ---------- */
+let selectedId = null;
+
+function renderResults() {
+  const q = $('#search').value.trim().toLowerCase();
+  const all = activeUsers();
+  const list = all.filter(u => !q || [u.name, u.code, u.dept, u.mobile].join(' ').toLowerCase().includes(q));
+  const ul = $('#results');
+  if (!all.length) { ul.innerHTML = '<li class="empty">No employees yet. Add them in the <b>Users</b> tab.</li>'; return; }
+  if (!list.length) { ul.innerHTML = `<li class="empty">No match for “${esc(q)}”.</li>`; return; }
+  ul.innerHTML = list.slice(0, 150).map(u => {
+    const st = statusOf(u.id);
+    const pill = st.state === 'in' ? `<span class="pill in">IN ${fmtTime(st.rec.in)}</span>`
+      : st.state === 'out' ? `<span class="pill out">OUT ${fmtTime(st.rec.out)}</span>`
+      : '<span class="pill none">Not in</span>';
+    return `<li><button class="row" data-uid="${u.id}"><span class="av">${esc(initials(u.name))}</span>
+      <span class="grow"><span class="name">${esc(u.name)}</span><span class="sub">${esc([u.code, u.dept].filter(Boolean).join(' · ') || '—')}</span></span>${pill}</button></li>`;
+  }).join('');
+}
+
+function renderSelected() {
+  const card = $('#selectedCard');
+  const u = selectedId && userById(selectedId);
+  if (!u || u.deleted) { card.hidden = true; card.innerHTML = ''; return; }
+  const st = statusOf(u.id);
+  let info, btn;
+  if (st.state === 'in') {
+    info = `Punched in today at <b>${fmtTime(st.rec.in)}</b>`;
+    btn = `<button class="btn act out" id="actBtn" data-act="out" data-rec="${st.rec.id}">Punch OUT</button>`;
+  } else {
+    info = st.state === 'out'
+      ? `Today: in ${fmtTime(st.rec.in)} · out ${fmtTime(st.rec.out)}. Punch in again if returning.`
+      : 'Not punched in today.';
+    btn = `<button class="btn act in" id="actBtn" data-act="in">Punch IN</button>`;
+  }
+  card.innerHTML = `<div class="sel-head"><span class="av">${esc(initials(u.name))}</span>
+    <div class="grow"><div class="sel-name">${esc(u.name)}</div><div class="sub">${esc([u.code, u.dept, u.mobile].filter(Boolean).join(' · '))}</div></div></div>
+    <p class="muted" style="margin:0 0 12px">${info}</p>${btn}
+    <button class="btn block" id="selCancel" style="margin-top:10px">Cancel</button>`;
+  card.hidden = false;
+}
+
+function renderInside() {
+  const k = dateKey();
+  const open = dayRecords(k).filter(r => !r.out).sort((a, b) => a.name.localeCompare(b.name));
+  $('#insideCount').textContent = open.length;
+  $('#insideList').innerHTML = open.length ? open.map(r => `<li><div class="row" style="cursor:default">
+      <span class="av">${esc(initials(r.name))}</span>
+      <span class="grow"><span class="name">${esc(r.name)}</span><span class="sub">In at ${fmtTime(r.in)}</span></span>
+      <button class="btn sm" data-out="${r.id}">Punch out</button></div></li>`).join('')
+    : '<li class="empty">Nobody is inside right now.</li>';
+}
+
+$('#search').addEventListener('input', renderResults);
+$('#results').addEventListener('click', e => {
+  const b = e.target.closest('[data-uid]');
+  if (!b) return;
+  selectedId = b.dataset.uid;
+  renderSelected();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+$('#selectedCard').addEventListener('click', e => {
+  if (e.target.id === 'selCancel') { selectedId = null; renderSelected(); return; }
+  const b = e.target.closest('#actBtn');
+  if (!b || b.disabled) return;
+  b.disabled = true; // stop double taps
+  if (b.dataset.act === 'in') punchIn(selectedId); else punchOut(b.dataset.rec, dateKey());
+});
+$('#insideList').addEventListener('click', e => {
+  const b = e.target.closest('[data-out]');
+  if (!b) return;
+  const rec = dayRecords(dateKey()).find(r => r.id === b.dataset.out);
+  if (rec && confirm(`Punch OUT ${rec.name} now?`)) punchOut(rec.id, rec.date);
+});
+
+/* ---------- REGISTER view ---------- */
+function renderRegister() {
+  const k = $('#regDate').value || dateKey();
+  const recs = dayRecords(k).sort((a, b) => a.in.localeCompare(b.in));
+  const people = new Set(recs.map(r => r.userId));
+  const inside = new Set(recs.filter(r => !r.out).map(r => r.userId));
+  $('#stPresent').textContent = people.size;
+  $('#stInside').textContent = inside.size;
+  $('#stLeft').textContent = [...people].filter(id => !inside.has(id)).length;
+  const isToday = k === dateKey();
+  $('#regBody').innerHTML = recs.length ? recs.map(r => {
+    let out = r.out ? fmtTime(r.out) + (r.manualOut ? ' <span class="pill warn">edited</span>' : '')
+      : isToday ? '<span class="pill in">Inside</span>' : '<span class="pill warn">Missing</span>';
+    const fix = !r.out && !isToday ? `<button class="btn sm" data-fix="${r.id}">Set out</button> ` : '';
+    return `<tr><td class="wrap"><b>${esc(r.name)}</b><div class="sub">${esc(r.code || r.dept || '')}</div></td>
+      <td>${fmtTime(r.in)}</td><td>${out}</td><td>${fmtMins(minsBetween(r.in, r.out))}</td>
+      <td>${fix}<button class="btn sm danger" data-del="${r.id}" aria-label="Delete">✕</button></td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="empty">No punches on this date.</td></tr>';
+}
+
+$('#regDate').addEventListener('change', renderRegister);
+$('#regBody').addEventListener('click', e => {
+  const k = $('#regDate').value || dateKey();
+  const del = e.target.closest('[data-del]'), fix = e.target.closest('[data-fix]');
+  const rec = (db.punches[k] || []).find(r => r.id === (del || fix)?.dataset[del ? 'del' : 'fix']);
+  if (!rec) return;
+  if (del) {
+    if (!confirm(`Delete this punch for ${rec.name} (${fmtDate(k)}, in ${fmtTime(rec.in)})?`)) return;
+    rec.deleted = true;
+  } else {
+    const t = prompt(`Punch-out time for ${rec.name} on ${fmtDate(k)} (24-hour HH:MM)`, '18:00');
+    if (!t) return;
+    const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim());
+    const out = m && new Date(`${k}T${pad(m[1])}:${m[2]}:00`);
+    if (!out || isNaN(out) || out <= new Date(rec.in)) { toast('Invalid time — must be after punch in', 'err'); return; }
+    rec.out = out.toISOString(); rec.manualOut = true;
+  }
+  rec.updatedAt = Date.now();
+  touchMonth(monthOf(k)); save(); renderAll(); scheduleSync(800);
+});
+
+/* ---------- REPORTS ---------- */
+function reportRows() {
+  let from = $('#rFrom').value || dateKey(), to = $('#rTo').value || from;
+  if (from > to) [from, to] = [to, from];
+  const uid = $('#rUser').value;
+  const rows = [];
+  Object.keys(db.punches).filter(k => k >= from && k <= to).sort().forEach(k => {
+    dayRecords(k).filter(r => !uid || r.userId === uid).sort((a, b) => a.name.localeCompare(b.name) || a.in.localeCompare(b.in))
+      .forEach(r => rows.push(r));
+  });
+  return { from, to, rows };
+}
+
+function renderReportPreview() {
+  const { rows } = reportRows();
+  $('#rCount').textContent = rows.length;
+  $('#rBody').innerHTML = rows.length ? rows.slice(0, 300).map(r => `<tr><td>${fmtDate(r.date)}</td><td class="wrap">${esc(r.name)}</td>
+    <td>${fmtTime(r.in)}</td><td>${r.out ? fmtTime(r.out) : '<span class="pill warn">—</span>'}</td><td>${fmtMins(minsBetween(r.in, r.out))}</td></tr>`).join('')
+    + (rows.length > 300 ? `<tr><td colspan="5" class="muted">…and ${rows.length - 300} more rows in the Excel file</td></tr>` : '')
+    : '<tr><td colspan="5" class="empty">No punches in this range.</td></tr>';
+}
+
+function renderUserSelect() {
+  const sel = $('#rUser'), cur = sel.value;
+  sel.innerHTML = '<option value="">All employees</option>' + activeUsers().map(u => `<option value="${u.id}">${esc(u.name)}${u.code ? ' (' + esc(u.code) + ')' : ''}</option>`).join('');
+  sel.value = cur;
+}
+
+function setRange(kind) {
+  const now = new Date(); let a = new Date(now), b = new Date(now);
+  if (kind === 'yesterday') { a.setDate(a.getDate() - 1); b = new Date(a); }
+  if (kind === 'week') { a.setDate(a.getDate() - ((a.getDay() + 6) % 7)); }
+  if (kind === 'month') { a = new Date(now.getFullYear(), now.getMonth(), 1); }
+  $('#rFrom').value = dateKey(a); $('#rTo').value = dateKey(b);
+  onRangeChange();
+}
+
+// Pull any months in the range from GitHub (other devices / older data) before reporting.
+async function onRangeChange() {
+  renderReportPreview();
+  if (!ghReady() || !navigator.onLine) return;
+  const { from, to } = reportRows();
+  const months = [];
+  for (let d = new Date(parseKey(from).getFullYear(), parseKey(from).getMonth(), 1); dateKey(d) <= to; d.setMonth(d.getMonth() + 1)) months.push(monthOf(dateKey(d)));
+  try { for (const m of months.slice(0, 24)) await pullMonth(m); save(); renderReportPreview(); } catch { /* keep local data */ }
+}
+
+['#rFrom', '#rTo', '#rUser'].forEach(s => $(s).addEventListener('change', onRangeChange));
+document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => setRange(b.dataset.range)));
+
+function reportTitle(from, to) { return from === to ? `Attendance ${fmtDate(from)}` : `Attendance ${fmtDate(from)} to ${fmtDate(to)}`; }
+
+function buildWorkbookBlob() {
+  const { from, to, rows } = reportRows();
+  const head = ['Date', 'Day', 'Emp Code', 'Name', 'Department', 'Punch In', 'Punch Out', 'Hours', 'Remarks'];
+  const body = rows.map(r => {
+    const m = minsBetween(r.in, r.out);
+    return [fmtDate(r.date), parseKey(r.date).toLocaleDateString('en-IN', { weekday: 'short' }), r.code || '', r.name, r.dept || '',
+      fmtTime(r.in), r.out ? fmtTime(r.out) : '', m == null ? '' : +(m / 60).toFixed(2),
+      !r.out ? (r.date === dateKey() ? 'Inside' : 'Missing punch out') : r.manualOut ? 'Out time entered manually' : ''];
+  });
+  // per-employee summary
+  const sum = new Map();
+  rows.forEach(r => {
+    const s = sum.get(r.userId) || { code: r.code || '', name: r.name, dept: r.dept || '', days: new Set(), mins: 0, missing: 0 };
+    s.days.add(r.date); const m = minsBetween(r.in, r.out); if (m == null) s.missing++; else s.mins += m;
+    sum.set(r.userId, s);
+  });
+  const sumRows = [...sum.values()].sort((a, b) => a.name.localeCompare(b.name))
+    .map(s => [s.code, s.name, s.dept, s.days.size, +(s.mins / 60).toFixed(2), s.missing]);
+  const base = `${reportTitle(from, to).replace(/\s+/g, '_')}`;
+
+  if (window.XLSX) {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([[reportTitle(from, to)], [], head, ...body]);
+    ws['!cols'] = [12, 6, 10, 26, 16, 11, 11, 7, 24].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, 'Punches');
+    const ws2 = XLSX.utils.aoa_to_sheet([['Summary ' + reportTitle(from, to)], [], ['Emp Code', 'Name', 'Department', 'Days Present', 'Total Hours', 'Missing Punch Out'], ...sumRows]);
+    ws2['!cols'] = [10, 26, 16, 12, 12, 16].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return { blob: new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), name: base + '.xlsx', from, to, rows };
+  }
+  // Fallback (Excel library could not load, e.g. offline on first use): CSV opens in Excel too
+  const csv = [head, ...body].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  return { blob: new Blob(['﻿' + csv], { type: 'text/csv' }), name: base + '.csv', from, to, rows };
+}
+
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+$('#btnExcel').addEventListener('click', () => {
+  const f = buildWorkbookBlob();
+  if (!f.rows.length && !confirm('No punches in this range. Download an empty file?')) return;
+  download(f.blob, f.name);
+  toast('Excel file downloaded', 'ok');
+});
+
+$('#btnShare').addEventListener('click', async () => {
+  const f = buildWorkbookBlob();
+  const file = new File([f.blob], f.name, { type: f.blob.type });
+  const title = reportTitle(f.from, f.to);
+  const text = `${title}\nTotal punches: ${f.rows.length}\nPlease find the attendance sheet attached.`;
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title, text }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  // Browsers cannot attach files to mailto links: download it, then open the email draft.
+  download(f.blob, f.name);
+  toast('File downloaded — attach it to the email', 'ok');
+  setTimeout(() => {
+    location.href = `mailto:${encodeURIComponent(cfg.email || '')}?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text + '\n\n(Attach the downloaded file: ' + f.name + ')')}`;
+  }, 700);
+});
+
+$('#btnPrint').addEventListener('click', () => {
+  const { from, to, rows } = reportRows();
+  $('#printArea').innerHTML = `<h1>Office Attendance Register</h1>
+    <div>${esc(reportTitle(from, to))} · Printed ${esc(new Date().toLocaleString('en-IN'))}${cfg.guard ? ' · ' + esc(cfg.guard) : ''}</div><br>
+    <table><thead><tr><th>#</th><th>Date</th><th>Emp Code</th><th>Name</th><th>Department</th><th>In</th><th>Out</th><th>Hours</th><th>Remarks</th></tr></thead>
+    <tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td>${fmtDate(r.date)}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.dept)}</td>
+      <td>${fmtTime(r.in)}</td><td>${fmtTime(r.out)}</td><td>${fmtMins(minsBetween(r.in, r.out))}</td>
+      <td>${!r.out ? (r.date === dateKey() ? 'Inside' : 'Missing out') : r.manualOut ? 'Manual out' : ''}</td></tr>`).join('') || '<tr><td colspan="9">No punches</td></tr>'}</tbody></table>
+    <div class="sign"><span>Security Guard: ____________________</span><span>Admin / HR: ____________________</span></div>`;
+  window.print();
+});
+
+/* ---------- USERS ---------- */
+function renderUsers() {
+  const q = $('#userSearch').value.trim().toLowerCase();
+  const all = activeUsers();
+  $('#userCount').textContent = all.length;
+  const list = all.filter(u => !q || [u.name, u.code, u.dept, u.mobile].join(' ').toLowerCase().includes(q));
+  $('#userList').innerHTML = list.length ? list.map(u => `<li><div class="row" style="cursor:default">
+      <span class="av">${esc(initials(u.name))}</span>
+      <span class="grow"><span class="name">${esc(u.name)}</span><span class="sub">${esc([u.code, u.dept, u.mobile].filter(Boolean).join(' · ') || '—')}</span></span>
+      <button class="btn sm" data-edit="${u.id}">Edit</button>
+      <button class="btn sm danger" data-remove="${u.id}" aria-label="Remove">✕</button></div></li>`).join('')
+    : `<li class="empty">${all.length ? 'No match.' : 'No employees yet. Add the first one above.'}</li>`;
+  $('#deptList').innerHTML = [...new Set(all.map(u => u.dept).filter(Boolean))].sort().map(d => `<option value="${esc(d)}">`).join('');
+}
+
+function resetUserForm() {
+  $('#userForm').reset(); $('#uId').value = '';
+  $('#userFormTitle').textContent = 'Add new employee'; $('#uSave').textContent = 'Save employee'; $('#uCancel').hidden = true;
+}
+
+$('#userForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const id = $('#uId').value;
+  const data = {
+    name: $('#uName').value.trim().replace(/\s+/g, ' '), code: $('#uCode').value.trim(),
+    dept: $('#uDept').value.trim(), mobile: $('#uMobile').value.trim()
+  };
+  if (!data.name) return;
+  const others = activeUsers().filter(u => u.id !== id);
+  if (data.code && others.some(u => (u.code || '').toLowerCase() === data.code.toLowerCase())) { toast('Employee code already used', 'err'); return; }
+  if (others.some(u => u.name.toLowerCase() === data.name.toLowerCase()) && !confirm(`An employee named "${data.name}" already exists. Add anyway?`)) return;
+  if (id) Object.assign(userById(id), data, { updatedAt: Date.now() });
+  else db.users.push({ id: newId(), ...data, createdAt: new Date().toISOString(), updatedAt: Date.now() });
+  touchUsers(); save();
+  toast(id ? 'Employee updated' : `${data.name} added`, 'ok');
+  resetUserForm(); renderAll(); scheduleSync(800);
+});
+$('#uCancel').addEventListener('click', resetUserForm);
+$('#userSearch').addEventListener('input', renderUsers);
+$('#userList').addEventListener('click', e => {
+  const ed = e.target.closest('[data-edit]'), rm = e.target.closest('[data-remove]');
+  if (ed) {
+    const u = userById(ed.dataset.edit);
+    $('#uId').value = u.id; $('#uName').value = u.name; $('#uCode').value = u.code || '';
+    $('#uDept').value = u.dept || ''; $('#uMobile').value = u.mobile || '';
+    $('#userFormTitle').textContent = 'Edit employee'; $('#uSave').textContent = 'Update employee'; $('#uCancel').hidden = false;
+    window.scrollTo({ top: 0, behavior: 'smooth' }); $('#uName').focus();
+  }
+  if (rm) {
+    const u = userById(rm.dataset.remove);
+    if (!confirm(`Remove ${u.name}? Their past punches stay in the reports.`)) return;
+    u.deleted = true; u.updatedAt = Date.now();
+    touchUsers(); save(); renderAll(); scheduleSync(800);
+  }
+});
+
+/* ---------- GitHub sync ---------- */
+const ghReady = () => !!(cfg.token && cfg.owner && cfg.repo);
+const ghUrl = p => `https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/contents/${(cfg.folder || 'data').replace(/^\/|\/$/g, '')}/${p}`;
+const ghHeaders = () => ({ Authorization: 'Bearer ' + cfg.token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
+
+function b64encode(str) {
+  const bytes = new TextEncoder().encode(str); let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function b64decode(b64) {
+  const bin = atob(b64.replace(/\s/g, ''));
+  return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+}
+async function ghError(r) {
+  let m = ''; try { m = (await r.json()).message; } catch {}
+  if (r.status === 401) return 'Token is invalid or expired';
+  if (r.status === 403) return 'Token has no write access to this repo';
+  if (r.status === 404) return 'Repository not found (check owner/repo/token access)';
+  return `GitHub error ${r.status}${m ? ': ' + m : ''}`;
+}
+async function ghGet(path) {
+  const r = await fetch(ghUrl(path) + '?ref=' + encodeURIComponent(cfg.branch || 'main'), { headers: ghHeaders(), cache: 'no-store' });
+  if (r.status === 404) {
+    // 404 can mean "file not created yet" or "no access to repo" — tell them apart
+    const repo = await fetch(`https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`, { headers: ghHeaders(), cache: 'no-store' });
+    if (!repo.ok) throw new Error(await ghError(repo));
+    return { sha: null, data: null };
+  }
+  if (!r.ok) throw new Error(await ghError(r));
+  const j = await r.json();
+  return { sha: j.sha, data: JSON.parse(b64decode(j.content)) };
+}
+async function ghPut(path, data, sha, message) {
+  const body = { message, content: b64encode(JSON.stringify(data, null, 1)), branch: cfg.branch || 'main' };
+  if (sha) body.sha = sha;
+  const r = await fetch(ghUrl(path), { method: 'PUT', headers: { ...ghHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (r.status === 409 || r.status === 422) return false; // file changed meanwhile → re-read, merge, retry
+  if (!r.ok) throw new Error(await ghError(r));
+  return true;
+}
+
+// Merge by id; the most recently updated copy wins. Deletions are kept as flags so they merge too.
+function mergeById(local, remote) {
+  const m = new Map();
+  [...local, ...(remote || [])].forEach(x => { const e = m.get(x.id); if (!e || (x.updatedAt || 0) > (e.updatedAt || 0)) m.set(x.id, x); });
+  return [...m.values()];
+}
+function mergeDays(days) {
+  Object.entries(days || {}).forEach(([k, recs]) => {
+    db.punches[k] = mergeById(db.punches[k] || [], recs).sort((a, b) => a.in.localeCompare(b.in));
+  });
+}
+function monthDays(m) {
+  const days = {};
+  Object.keys(db.punches).filter(k => k.startsWith(m + '-')).sort().forEach(k => days[k] = db.punches[k]);
+  return days;
+}
+
+async function syncUsers() {
+  for (let i = 0; i < 4; i++) {
+    const snap = dirty.users;
+    const { sha, data } = await ghGet('users.json');
+    if (data) db.users = mergeById(db.users, data.users);
+    if (!snap && data) return;
+    if (!snap && !db.users.length) return;
+    if (await ghPut('users.json', { updated: new Date().toISOString(), users: db.users }, sha, `Update employees (${cfg.guard || 'guard app'})`)) {
+      if (dirty.users === snap) dirty.users = 0;
+      return;
+    }
+  }
+  throw new Error('Could not save employees (busy), will retry');
+}
+async function pullMonth(m) {
+  const { data } = await ghGet(`punches/${m}.json`);
+  if (data) mergeDays(data.days);
+}
+async function syncMonth(m) {
+  for (let i = 0; i < 4; i++) {
+    const snap = dirty.months[m];
+    const { sha, data } = await ghGet(`punches/${m}.json`);
+    if (data) mergeDays(data.days);
+    if (!snap) return;
+    if (await ghPut(`punches/${m}.json`, { month: m, updated: new Date().toISOString(), days: monthDays(m) }, sha, `Punches ${m} (${cfg.guard || 'guard app'})`)) {
+      if (dirty.months[m] === snap) delete dirty.months[m];
+      return;
+    }
+  }
+  throw new Error('Could not save punches (busy), will retry');
+}
+
+let syncing = false, syncAgain = false, syncTimer;
+function scheduleSync(ms = 1500) { clearTimeout(syncTimer); syncTimer = setTimeout(sync, ms); updateSyncBadge(); }
+
+async function sync() {
+  if (!ghReady()) { updateSyncBadge(); return; }
+  if (syncing) { syncAgain = true; return; }
+  if (!navigator.onLine) { setBadge('offline', hasPending() ? 'Offline · pending' : 'Offline'); return; }
+  syncing = true; setBadge('syncing', 'Syncing…');
+  try {
+    await syncUsers();
+    const now = new Date();
+    const months = new Set([monthOf(dateKey(now)), monthOf(dateKey(new Date(now.getFullYear(), now.getMonth() - 1, 1))), ...Object.keys(dirty.months)]);
+    for (const m of months) await syncMonth(m);
+    save();
+    store.set(K_LAST, Date.now());
+    updateSyncBadge();
+  } catch (e) {
+    save();
+    setBadge('error', 'Sync failed');
+    lastError = e.message;
+    renderLastSync();
+  } finally {
+    syncing = false;
+    renderAll();
+    if (syncAgain) { syncAgain = false; scheduleSync(300); }
+  }
+}
+
+let lastError = '';
+function setBadge(s, text) { $('#syncBtn').dataset.s = s; $('#syncText').textContent = text; }
+function updateSyncBadge() {
+  if (!ghReady()) return setBadge('local', 'On this device');
+  if (syncing) return;
+  if (!navigator.onLine) return setBadge('offline', hasPending() ? 'Offline · pending' : 'Offline');
+  if (hasPending()) return setBadge('pending', 'Pending sync');
+  lastError = '';
+  const t = store.get(K_LAST, 0);
+  setBadge('ok', t ? 'Synced ' + new Date(t).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Synced');
+  renderLastSync();
+}
+function renderLastSync() {
+  const t = store.get(K_LAST, 0);
+  $('#cLast').innerHTML = !ghReady() ? 'Cloud backup is off — data is only on this phone.'
+    : (lastError ? `<span style="color:var(--danger)">Last error: ${esc(lastError)}</span><br>` : '') +
+      (t ? 'Last successful sync: ' + new Date(t).toLocaleString('en-IN') : 'Not synced yet.');
+}
+
+$('#syncBtn').addEventListener('click', () => {
+  if (!ghReady()) { showView('settings'); toast('Add a GitHub token to enable cloud backup'); return; }
+  if (lastError) toast(lastError, 'err');
+  sync();
+});
+window.addEventListener('online', () => sync());
+window.addEventListener('offline', updateSyncBadge);
+setInterval(() => { if (!document.hidden) sync(); }, 60000); // pick up punches made on other devices
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sync(); });
+
+/* ---------- SETTINGS ---------- */
+const cfgFields = { cGuard: 'guard', cEmail: 'email', cOwner: 'owner', cRepo: 'repo', cBranch: 'branch', cFolder: 'folder', cToken: 'token' };
+function fillCfg() { Object.entries(cfgFields).forEach(([id, k]) => $('#' + id).value = cfg[k] || ''); renderLastSync(); }
+$('#cfgForm').addEventListener('submit', e => {
+  e.preventDefault();
+  Object.entries(cfgFields).forEach(([id, k]) => cfg[k] = $('#' + id).value.trim());
+  cfg.branch ||= 'main'; cfg.folder ||= 'data';
+  store.set(K_CFG, cfg);
+  // make sure everything on this phone gets uploaded to the (possibly new) repo
+  if (ghReady()) { touchUsers(); Object.keys(db.punches).forEach(k => touchMonth(monthOf(k))); save(); }
+  toast('Settings saved', 'ok'); fillCfg(); sync();
+});
+$('#cSyncNow').addEventListener('click', () => { if (!ghReady()) toast('Enter owner, repo and token first', 'err'); else sync(); });
+
+$('#bExport').addEventListener('click', () => {
+  download(new Blob([JSON.stringify({ exported: new Date().toISOString(), ...db }, null, 1)], { type: 'application/json' }), `punch-backup-${dateKey()}.json`);
+});
+$('#bImport').addEventListener('click', () => $('#bFile').click());
+$('#bFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (!Array.isArray(data.users) || typeof data.punches !== 'object') throw new Error('Not a punch backup file');
+    db.users = mergeById(db.users, data.users); mergeDays(data.punches);
+    touchUsers(); Object.keys(data.punches).forEach(k => touchMonth(monthOf(k)));
+    save(); renderAll(); scheduleSync(500);
+    toast('Backup restored', 'ok');
+  } catch (err) { toast('Restore failed: ' + err.message, 'err'); }
+});
+
+/* ---------- navigation / clock ---------- */
+function showView(v) {
+  document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.id === 'v-' + v));
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  if (v === 'settings') fillCfg();
+  if (v === 'reports') onRangeChange();
+  window.scrollTo(0, 0);
+}
+$('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) showView(b.dataset.view); });
+
+let shownDay = dateKey();
+function tick() {
+  const now = new Date();
+  $('#clock').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  $('#clockDate').textContent = longDate(now);
+  if (dateKey(now) !== shownDay) { // midnight rollover
+    if ($('#regDate').value === shownDay) $('#regDate').value = dateKey(now);
+    shownDay = dateKey(now); selectedId = null; renderAll();
+  }
+}
+
+function renderAll() {
+  $('#hdrDate').textContent = longDate(new Date());
+  renderResults(); renderSelected(); renderInside(); renderRegister(); renderUsers(); renderUserSelect(); renderReportPreview();
+}
+
+$('#regDate').value = dateKey();
+$('#rFrom').value = $('#rTo').value = dateKey();
+tick(); setInterval(tick, 1000);
+renderAll(); updateSyncBadge(); sync();
+
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
