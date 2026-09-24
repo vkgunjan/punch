@@ -3,11 +3,19 @@
 A mobile web app the security guard uses in place of the paper register to record punch in and punch out.
 
 - **Punch**: search for an employee, then tap **Punch IN** or **Punch OUT**. The date and time are saved automatically. "Inside now" lists everyone who hasn't left yet.
+- **Attendance rules**: each employee gets **one punch in and one punch out per day**. If punch out was pressed by mistake, an admin can use **Undo punch out**, which needs the PIN.
+  - **Full day** = 9 hours or more from punch in to punch out. Under 9 hours is a **Half day**, and the guard gets a warning before an early punch out.
+  - **Late** = punching in after 10:00 AM.
+  - Sunday is the weekly off.
+  - These limits are set at the top of the script in `index.html` (`WORK_MINS`, `LATE_AFTER_MINS`, `WEEKLY_OFF`).
+- **Calendar**: a month view for one employee, with a coloured dot for each day. 🟢 full day · 🟡 late punch · 🟣 half day (under 9h) · 🔴 no punch (absent) · green ring = in office now · grey = Sunday. The counts of Full, Late, Half and Absent days are shown below, and you can tap a day to see its punch times, hours and breaks. Open it from the Calendar tab, or by tapping a name in **Users**.
+  - If a day is both late and short, it shows purple (half day), and the day's details say "Late + Half day".
+  - Days before the app was in use, or before the employee was added, aren't counted as absent.
 - **Breaks**: while someone is inside, tap their name and choose **Lunch**, **Tea break**, **Personal** or **Official work** when they go out, then **Back IN** when they return. The Punch screen lists everyone "Out on break" with how long they've been away, each with a Back IN button. If someone leaves for the day while on a break, **Punch OUT** ends the break at the same time.
   - **Net hours** = punch in to punch out, minus lunch, tea and personal breaks. **Official work** counts as working time.
 - **Register**: shows the punches for any day, with Present, Inside and Left counts. You can delete a wrong entry, or enter a missed punch-out for an earlier day. A manually entered time is marked "edited".
 - **Reports**: pick a date range, then narrow it to one **Department** (for example Pantry) and/or one employee if you want. Then:
-  - **Download Excel** gives a `.xlsx` file with two sheets. *Punches* shows each punch with lunch, other breaks and official-work minutes, the break times, and total and net hours. *Summary* gives days present, total hours, lunch, break and official hours, and net hours per employee.
+  - **Download Excel** gives a `.xlsx` file with two sheets. *Punches* shows each punch with lunch, other breaks and official-work minutes, the break times, and total and net hours. *Punches* also has a **Status** column: Full day, Half day, Late + ..., or Missing punch out. *Summary* gives days present, full, late, half and absent days, total hours, lunch, break and official hours, and net hours per employee.
   - **Print** prints a register-style page with signature lines.
   - **Email / Share** opens the phone's share sheet with the Excel file attached, so you can send it with Gmail, WhatsApp and so on. On a desktop it downloads the file and opens an email draft.
 - **Users**: add, edit or remove employees (name, code, department, mobile), or add many at once with **Import CSV** (columns: Name, Emp Code, Department, Mobile; tap **Download sample** for a template). Removing someone keeps their old punches in the reports.

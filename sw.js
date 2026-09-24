@@ -1,5 +1,5 @@
 // Offline support: the app keeps working without internet; punches sync to GitHub later.
-const CACHE = 'punch-2026-09-24.7'; // keep in step with APP_VERSION in index.html
+const CACHE = 'punch-2026-09-24.8'; // keep in step with APP_VERSION in index.html
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];
 
