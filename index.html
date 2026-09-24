@@ -254,14 +254,14 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
       <h2 style="margin-top:18px">Cloud backup on GitHub</h2>
       <p class="hint" style="margin:-6px 0 12px">Every punch is saved on this phone right away. With a GitHub token, it is also saved as JSON files in your repo so the data is safe and the same on every device.</p>
       <div class="grid2">
-        <div class="field"><label for="cOwner">GitHub owner</label><input id="cOwner" placeholder="vkgunjan"></div>
-        <div class="field"><label for="cRepo">Data repository</label><input id="cRepo" placeholder="punch"></div>
+        <div class="field"><label for="cOwner">GitHub owner</label><input id="cOwner" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="vkgunjan"></div>
+        <div class="field"><label for="cRepo">Data repository</label><input id="cRepo" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="punch-data"></div>
       </div>
       <div class="grid2">
-        <div class="field"><label for="cBranch">Branch</label><input id="cBranch" placeholder="main"></div>
-        <div class="field"><label for="cFolder">Folder</label><input id="cFolder" placeholder="data"></div>
+        <div class="field"><label for="cBranch">Branch</label><input id="cBranch" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="main"></div>
+        <div class="field"><label for="cFolder">Folder</label><input id="cFolder" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="data"></div>
       </div>
-      <div class="field"><label for="cToken">Access token</label><input id="cToken" type="password" placeholder="github_pat_..."></div>
+      <div class="field"><label for="cToken">Access token</label><input id="cToken" autocapitalize="off" autocorrect="off" spellcheck="false" type="password" placeholder="github_pat_..."></div>
       <p class="hint">Create a <b>fine-grained token</b> at GitHub → Settings → Developer settings, give it access to this one repository only, with <b>Contents: Read and write</b>. See README for the steps.</p>
       <div class="btn-row" style="margin-top:12px">
         <button class="btn primary" type="submit">Save settings</button>
@@ -349,7 +349,7 @@ const store = {
 // db.users: [{id,name,code,dept,mobile,updatedAt,deleted}]
 // db.punches: { 'YYYY-MM-DD': [{id,userId,name,code,dept,date,in,out,by,manualOut,updatedAt,deleted}] }
 let db = store.get(K_DATA, null) || { users: [], punches: {} };
-let cfg = Object.assign({ owner: 'vkgunjan', repo: 'punch', branch: 'main', folder: 'data', token: '', email: '', guard: '' }, store.get(K_CFG, {}));
+let cfg = Object.assign({ owner: 'vkgunjan', repo: 'punch-data', branch: 'main', folder: 'data', token: '', email: '', guard: '' }, store.get(K_CFG, {}));
 // dirty counters: which files still need to be uploaded to GitHub
 let dirty = Object.assign({ users: 0, months: {} }, store.get(K_DIRTY, {}));
 
@@ -785,11 +785,22 @@ async function ghError(r) {
   if (r.status === 404) return 'Repository not found (check owner/repo/token access)';
   return `GitHub error ${r.status}${m ? ': ' + m : ''}`;
 }
+// A 404 on the repo means a wrong name OR a token without access to it — work out which.
+async function explainMissingRepo() {
+  const full = `${cfg.owner}/${cfg.repo}`;
+  const me = await fetch('https://api.github.com/user', { headers: ghHeaders(), cache: 'no-store' });
+  if (me.status === 401) return 'Token is invalid or expired — create a new one';
+  const login = me.ok ? (await me.json()).login : '';
+  const pub = await fetch(`https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`, { cache: 'no-store' });
+  if (pub.ok) return `"${full}" is a PUBLIC repo — use your private data repo (e.g. punch-data)`;
+  return `The token${login ? ' of ' + login : ''} cannot see "${full}". Check the spelling, or on GitHub edit the token → Repository access → add ${cfg.repo}, with Contents: Read and write`;
+}
 async function ghGet(path) {
   const r = await fetch(ghUrl(path) + '?ref=' + encodeURIComponent(cfg.branch || 'main'), { headers: ghHeaders(), cache: 'no-store' });
   if (r.status === 404) {
     // 404 can mean "file not created yet" or "no access to repo" — tell them apart
     const repo = await fetch(`https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`, { headers: ghHeaders(), cache: 'no-store' });
+    if (repo.status === 404) throw new Error(await explainMissingRepo());
     if (!repo.ok) throw new Error(await ghError(repo));
     return { sha: null, data: null };
   }
@@ -802,6 +813,7 @@ async function ghPut(path, data, sha, message) {
   if (sha) body.sha = sha;
   const r = await fetch(ghUrl(path), { method: 'PUT', headers: { ...ghHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (r.status === 409 || r.status === 422) return false; // file changed meanwhile → re-read, merge, retry
+  if (r.status === 404) throw new Error(await explainMissingRepo());
   if (!r.ok) throw new Error(await ghError(r));
   return true;
 }
@@ -918,6 +930,10 @@ function fillCfg() { Object.entries(cfgFields).forEach(([id, k]) => $('#' + id).
 $('#cfgForm').addEventListener('submit', e => {
   e.preventDefault();
   Object.entries(cfgFields).forEach(([id, k]) => cfg[k] = $('#' + id).value.trim());
+  // tolerate pasted URLs / "owner/repo" / stray spaces from phone keyboards
+  ['owner', 'repo', 'branch', 'folder', 'token'].forEach(k => cfg[k] = cfg[k].replace(/\s+/g, ''));
+  cfg.repo = cfg.repo.replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$|\/$/i, '');
+  if (cfg.repo.includes('/')) [cfg.owner, cfg.repo] = cfg.repo.split('/').slice(-2);
   cfg.branch ||= 'main'; cfg.folder ||= 'data';
   store.set(K_CFG, cfg);
   // make sure everything on this phone gets uploaded to the (possibly new) repo
