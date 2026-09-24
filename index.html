@@ -87,10 +87,14 @@ input:focus,select:focus{outline:2px solid var(--primary);outline-offset:0;borde
 .sel-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .sel-head .av{flex-basis:52px;height:52px;font-size:18px}
 .sel-name{font-size:20px;font-weight:700}
+.brk-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.brk-line{display:flex;flex-wrap:wrap;gap:6px;white-space:normal}
+#regBody tr:has(+ .brk-row) td{border-bottom:0;padding-bottom:2px}
+.brk-row td{padding-top:0}
 .act{width:100%;min-height:64px;font-size:20px;border-radius:12px}
 .act.in{background:var(--in);color:#fff}.act.out{background:var(--out);color:#fff}
 @media (prefers-color-scheme: dark){.act.in,.act.out{color:#0b1220}}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
 .stat b{display:block;font-size:24px}.stat span{font-size:12px;color:var(--muted)}
 .tbl-wrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
@@ -117,12 +121,14 @@ dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);co
 dialog::backdrop{background:rgba(15,23,42,.55)}
 #printArea{display:none}
 @media print{
+  @page{size:A4 landscape;margin:10mm}
   body{background:#fff;color:#000;padding:0}
   body>*:not(#printArea){display:none!important}
   #printArea{display:block;font:12px/1.4 Arial,sans-serif}
   #printArea h1{font-size:18px;margin:0 0 4px}
   #printArea table{font-size:11px}
   #printArea th,#printArea td{border:1px solid #000;padding:5px;color:#000;white-space:nowrap}
+  #printArea td.brk{white-space:normal;min-width:160px}
   #printArea .sign{display:flex;justify-content:space-between;margin-top:40px}
 }
 </style>
@@ -153,6 +159,11 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
       <ul id="results" class="list" style="margin-top:8px;max-height:360px;overflow:auto"></ul>
     </div>
 
+    <div class="card" id="breakCard" hidden>
+      <h2>Out on break <span id="breakCount" class="badge">0</span></h2>
+      <ul id="breakList" class="list"></ul>
+    </div>
+
     <div class="card">
       <h2>Inside now <span id="insideCount" class="badge">0</span></h2>
       <ul id="insideList" class="list"></ul>
@@ -168,12 +179,13 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
     <div class="stats">
       <div class="stat"><b id="stPresent">0</b><span>Present</span></div>
       <div class="stat"><b id="stInside">0</b><span>Inside</span></div>
+      <div class="stat"><b id="stBreak">0</b><span>On break</span></div>
       <div class="stat"><b id="stLeft">0</b><span>Left</span></div>
     </div>
     <div class="card">
       <h2>Punch register</h2>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Name</th><th>In</th><th>Out</th><th>Hours</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>In</th><th>Out</th><th>Net hrs</th><th></th></tr></thead>
         <tbody id="regBody"></tbody>
       </table></div>
     </div>
@@ -206,7 +218,7 @@ dialog::backdrop{background:rgba(15,23,42,.55)}
     <div class="card">
       <h2>Preview <span id="rCount" class="badge">0</span></h2>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Date</th><th>Name</th><th>In</th><th>Out</th><th>Hours</th></tr></thead>
+        <thead><tr><th>Date</th><th>Name</th><th>In</th><th>Out</th><th>Breaks</th><th>Net hrs</th></tr></thead>
         <tbody id="rBody"></tbody>
       </table></div>
     </div>
@@ -362,10 +374,38 @@ const activeUsers = () => db.users.filter(u => !u.deleted).sort((a, b) => a.name
 const userById = id => db.users.find(u => u.id === id);
 const dayRecords = k => (db.punches[k] || []).filter(r => !r.deleted);
 
+// Breaks live on the day's punch record: rec.breaks = [{ type, out, in }] (in = null while still away)
+const BREAKS = { lunch: 'Lunch', tea: 'Tea break', personal: 'Personal', official: 'Official work' };
+const breakLabel = t => BREAKS[t] || 'Break';
+const openBreak = rec => (rec.breaks || []).find(b => !b.in);
+const fmtShort = m => m == null ? '' : m < 60 ? `${m}m` : fmtMins(m);
+// An unfinished break runs until punch-out, or until now while the person is still away today.
+function breakMins(rec, b) {
+  const end = b.in || rec.out || (rec.date === dateKey() ? new Date().toISOString() : null);
+  return minsBetween(b.out, end) || 0;
+}
+function breakTotals(rec) {
+  const t = { lunch: 0, other: 0, official: 0 };
+  (rec.breaks || []).forEach(b => { t[b.type === 'lunch' ? 'lunch' : b.type === 'official' ? 'official' : 'other'] += breakMins(rec, b); });
+  return t;
+}
+// Net = time between punch in and out, minus lunch and personal/tea breaks. Official work counts as work.
+function netMins(rec) {
+  const gross = minsBetween(rec.in, rec.out);
+  if (gross == null) return null;
+  const t = breakTotals(rec);
+  return Math.max(0, gross - t.lunch - t.other);
+}
+const breakText = rec => (rec.breaks || []).map(b => `${breakLabel(b.type)} ${fmtTime(b.out)}–${b.in ? fmtTime(b.in) : '?'} (${fmtShort(breakMins(rec, b))})`).join('; ');
+function remarkOf(r) {
+  if (!r.out) { const b = openBreak(r); return r.date !== dateKey() ? 'Missing punch out' : b ? 'Out: ' + breakLabel(b.type) : 'Inside'; }
+  return r.manualOut ? 'Out time entered manually' : '';
+}
+
 function statusOf(userId) {
   const recs = dayRecords(dateKey()).filter(r => r.userId === userId);
   const open = recs.find(r => !r.out);
-  if (open) return { state: 'in', rec: open };
+  if (open) { const brk = openBreak(open); return brk ? { state: 'break', rec: open, brk } : { state: 'in', rec: open }; }
   if (recs.length) return { state: 'out', rec: recs[recs.length - 1] };
   return { state: 'none' };
 }
@@ -374,7 +414,7 @@ function statusOf(userId) {
 function punchIn(userId) {
   const u = userById(userId);
   if (!u || u.deleted) return;
-  if (statusOf(userId).state === 'in') { toast(`${u.name} is already punched in`, 'err'); return; }
+  if (['in', 'break'].includes(statusOf(userId).state)) { toast(`${u.name} is already punched in`, 'err'); return; }
   const now = new Date(), k = dateKey(now);
   (db.punches[k] ||= []).push({
     id: newId(), userId: u.id, name: u.name, code: u.code || '', dept: u.dept || '',
@@ -389,9 +429,34 @@ function punchOut(recId, date) {
   const rec = (db.punches[date] || []).find(r => r.id === recId);
   if (!rec || rec.out) return;
   rec.out = new Date().toISOString();
+  const b = openBreak(rec);
+  if (b) b.in = rec.out; // left for the day while on a break
   rec.updatedAt = Date.now();
   touchMonth(monthOf(date)); save();
   toast(`${rec.name} punched OUT at ${fmtTime(rec.out)}`, 'ok');
+  afterChange();
+}
+
+const todayRec = id => (db.punches[dateKey()] || []).find(r => r.id === id && !r.deleted);
+
+function startBreak(recId, type) {
+  const rec = todayRec(recId);
+  if (!rec || rec.out || openBreak(rec)) return;
+  const now = new Date().toISOString();
+  (rec.breaks ||= []).push({ type, out: now, in: null });
+  rec.updatedAt = Date.now();
+  touchMonth(monthOf(rec.date)); save();
+  toast(`${rec.name} went out — ${breakLabel(type)} at ${fmtTime(now)}`, 'ok');
+  afterChange();
+}
+
+function endBreak(recId) {
+  const rec = todayRec(recId), b = rec && openBreak(rec);
+  if (!b) return;
+  b.in = new Date().toISOString();
+  rec.updatedAt = Date.now();
+  touchMonth(monthOf(rec.date)); save();
+  toast(`${rec.name} back from ${breakLabel(b.type)} (${fmtShort(minsBetween(b.out, b.in))})`, 'ok');
   afterChange();
 }
 
@@ -414,7 +479,8 @@ function renderResults() {
   if (!list.length) { ul.innerHTML = `<li class="empty">No match for “${esc(q)}”.</li>`; return; }
   ul.innerHTML = list.slice(0, 150).map(u => {
     const st = statusOf(u.id);
-    const pill = st.state === 'in' ? `<span class="pill in">IN ${fmtTime(st.rec.in)}</span>`
+    const pill = st.state === 'break' ? `<span class="pill warn">${esc(breakLabel(st.brk.type))} ${fmtTime(st.brk.out)}</span>`
+      : st.state === 'in' ? `<span class="pill in">IN ${fmtTime(st.rec.in)}</span>`
       : st.state === 'out' ? `<span class="pill out">OUT ${fmtTime(st.rec.out)}</span>`
       : '<span class="pill none">Not in</span>';
     return `<li><button class="row" data-uid="${u.id}"><span class="av">${esc(initials(u.name))}</span>
@@ -428,9 +494,16 @@ function renderSelected() {
   if (!u || u.deleted) { card.hidden = true; card.innerHTML = ''; return; }
   const st = statusOf(u.id);
   let info, btn;
-  if (st.state === 'in') {
-    info = `Punched in today at <b>${fmtTime(st.rec.in)}</b>`;
-    btn = `<button class="btn act out" id="actBtn" data-act="out" data-rec="${st.rec.id}">Punch OUT</button>`;
+  const done = st.rec && st.rec.breaks?.length ? `<br><span class="sub" style="white-space:normal">Breaks: ${esc(breakText(st.rec))}</span>` : '';
+  if (st.state === 'break') {
+    info = `Out for <b>${esc(breakLabel(st.brk.type))}</b> since ${fmtTime(st.brk.out)} (${fmtShort(breakMins(st.rec, st.brk))})`;
+    btn = `<button class="btn act in" id="actBtn" data-act="back" data-rec="${st.rec.id}">Back IN from ${esc(breakLabel(st.brk.type))}</button>
+      <button class="btn block" data-act="out" data-rec="${st.rec.id}" style="margin-top:10px">Not coming back — Punch OUT</button>`;
+  } else if (st.state === 'in') {
+    info = `Punched in today at <b>${fmtTime(st.rec.in)}</b>${done}`;
+    btn = `<label>Going out for</label><div class="brk-grid">${Object.entries(BREAKS).map(([k, l]) =>
+        `<button class="btn" data-break="${k}" data-rec="${st.rec.id}">${esc(l)}</button>`).join('')}</div>
+      <button class="btn act out" id="actBtn" data-act="out" data-rec="${st.rec.id}">Punch OUT (leaving for the day)</button>`;
   } else {
     info = st.state === 'out'
       ? `Today: in ${fmtTime(st.rec.in)} · out ${fmtTime(st.rec.out)}. Punch in again if returning.`
@@ -446,7 +519,14 @@ function renderSelected() {
 
 function renderInside() {
   const k = dateKey();
-  const open = dayRecords(k).filter(r => !r.out).sort((a, b) => a.name.localeCompare(b.name));
+  const away = dayRecords(k).filter(r => !r.out && openBreak(r)).sort((a, b) => openBreak(a).out.localeCompare(openBreak(b).out));
+  $('#breakCard').hidden = !away.length;
+  $('#breakCount').textContent = away.length;
+  $('#breakList').innerHTML = away.map(r => { const b = openBreak(r); return `<li><div class="row" style="cursor:default">
+      <span class="av">${esc(initials(r.name))}</span>
+      <span class="grow"><span class="name">${esc(r.name)}</span><span class="sub">${esc(breakLabel(b.type))} since ${fmtTime(b.out)} · ${fmtShort(breakMins(r, b))}</span></span>
+      <button class="btn sm" data-back="${r.id}">Back IN</button></div></li>`; }).join('');
+  const open = dayRecords(k).filter(r => !r.out && !openBreak(r)).sort((a, b) => a.name.localeCompare(b.name));
   $('#insideCount').textContent = open.length;
   $('#insideList').innerHTML = open.length ? open.map(r => `<li><div class="row" style="cursor:default">
       <span class="av">${esc(initials(r.name))}</span>
@@ -465,10 +545,18 @@ $('#results').addEventListener('click', e => {
 });
 $('#selectedCard').addEventListener('click', e => {
   if (e.target.id === 'selCancel') { selectedId = null; renderSelected(); return; }
-  const b = e.target.closest('#actBtn');
+  const b = e.target.closest('[data-act],[data-break]');
   if (!b || b.disabled) return;
-  b.disabled = true; // stop double taps
-  if (b.dataset.act === 'in') punchIn(selectedId); else punchOut(b.dataset.rec, dateKey());
+  $('#selectedCard').querySelectorAll('button').forEach(x => x.disabled = true); // stop double taps
+  if (b.dataset.break) startBreak(b.dataset.rec, b.dataset.break);
+  else if (b.dataset.act === 'in') punchIn(selectedId);
+  else if (b.dataset.act === 'back') endBreak(b.dataset.rec);
+  else punchOut(b.dataset.rec, dateKey());
+  if (selectedId) renderSelected(); // action was refused — re-enable the buttons
+});
+$('#breakList').addEventListener('click', e => {
+  const b = e.target.closest('[data-back]');
+  if (b) endBreak(b.dataset.back);
 });
 $('#insideList').addEventListener('click', e => {
   const b = e.target.closest('[data-out]');
@@ -482,18 +570,25 @@ function renderRegister() {
   const k = $('#regDate').value || dateKey();
   const recs = dayRecords(k).sort((a, b) => a.in.localeCompare(b.in));
   const people = new Set(recs.map(r => r.userId));
-  const inside = new Set(recs.filter(r => !r.out).map(r => r.userId));
-  $('#stPresent').textContent = people.size;
-  $('#stInside').textContent = inside.size;
-  $('#stLeft').textContent = [...people].filter(id => !inside.has(id)).length;
   const isToday = k === dateKey();
+  const open = recs.filter(r => !r.out);
+  const inside = new Set(open.map(r => r.userId));
+  const onBreak = isToday ? new Set(open.filter(openBreak).map(r => r.userId)) : new Set();
+  $('#stPresent').textContent = people.size;
+  $('#stInside').textContent = inside.size - onBreak.size;
+  $('#stBreak').textContent = onBreak.size;
+  $('#stLeft').textContent = [...people].filter(id => !inside.has(id)).length;
   $('#regBody').innerHTML = recs.length ? recs.map(r => {
+    const ob = openBreak(r);
     let out = r.out ? fmtTime(r.out) + (r.manualOut ? ' <span class="pill warn">edited</span>' : '')
-      : isToday ? '<span class="pill in">Inside</span>' : '<span class="pill warn">Missing</span>';
+      : !isToday ? '<span class="pill warn">Missing</span>'
+      : ob ? `<span class="pill warn">${esc(breakLabel(ob.type))}</span>` : '<span class="pill in">Inside</span>';
     const fix = !r.out && !isToday ? `<button class="btn sm" data-fix="${r.id}">Set out</button> ` : '';
+    const brks = (r.breaks || []).map(b => `<span class="pill ${b.type === 'official' ? 'none' : 'warn'}">${esc(breakLabel(b.type))} ${fmtTime(b.out)}–${b.in ? fmtTime(b.in) : '…'} · ${fmtShort(breakMins(r, b))}</span>`).join(' ');
     return `<tr><td class="wrap"><b>${esc(r.name)}</b><div class="sub">${esc(r.code || r.dept || '')}</div></td>
-      <td>${fmtTime(r.in)}</td><td>${out}</td><td>${fmtMins(minsBetween(r.in, r.out))}</td>
-      <td>${fix}<button class="btn sm danger" data-del="${r.id}" aria-label="Delete">✕</button></td></tr>`;
+      <td>${fmtTime(r.in)}</td><td>${out}</td><td>${fmtMins(netMins(r))}</td>
+      <td>${fix}<button class="btn sm danger" data-del="${r.id}" aria-label="Delete">✕</button></td></tr>`
+      + (brks ? `<tr class="brk-row"><td colspan="5"><div class="brk-line">${brks}</div></td></tr>` : '');
   }).join('') : '<tr><td colspan="5" class="empty">No punches on this date.</td></tr>';
 }
 
@@ -513,6 +608,8 @@ $('#regBody').addEventListener('click', async e => {
     const out = m && new Date(`${k}T${pad(m[1])}:${m[2]}:00`);
     if (!out || isNaN(out) || out <= new Date(rec.in)) { toast('Invalid time — must be after punch in', 'err'); return; }
     rec.out = out.toISOString(); rec.manualOut = true;
+    const b = openBreak(rec);
+    if (b) b.in = new Date(Math.max(out, new Date(b.out))).toISOString(); // never came back from the break
   }
   rec.updatedAt = Date.now();
   touchMonth(monthOf(k)); save(); renderAll(); scheduleSync(800);
@@ -535,9 +632,10 @@ function renderReportPreview() {
   const { rows } = reportRows();
   $('#rCount').textContent = rows.length;
   $('#rBody').innerHTML = rows.length ? rows.slice(0, 300).map(r => `<tr><td>${fmtDate(r.date)}</td><td class="wrap">${esc(r.name)}</td>
-    <td>${fmtTime(r.in)}</td><td>${r.out ? fmtTime(r.out) : '<span class="pill warn">—</span>'}</td><td>${fmtMins(minsBetween(r.in, r.out))}</td></tr>`).join('')
-    + (rows.length > 300 ? `<tr><td colspan="5" class="muted">…and ${rows.length - 300} more rows in the Excel file</td></tr>` : '')
-    : '<tr><td colspan="5" class="empty">No punches in this range.</td></tr>';
+    <td>${fmtTime(r.in)}</td><td>${r.out ? fmtTime(r.out) : '<span class="pill warn">—</span>'}</td>
+    <td>${r.breaks?.length ? `${r.breaks.length} · ${fmtShort(Object.values(breakTotals(r)).reduce((a, b) => a + b, 0))}` : '—'}</td><td>${fmtMins(netMins(r))}</td></tr>`).join('')
+    + (rows.length > 300 ? `<tr><td colspan="6" class="muted">…and ${rows.length - 300} more rows in the Excel file</td></tr>` : '')
+    : '<tr><td colspan="6" class="empty">No punches in this range.</td></tr>';
 }
 
 function renderUserSelect() {
@@ -572,31 +670,37 @@ function reportTitle(from, to) { return from === to ? `Attendance ${fmtDate(from
 
 function buildWorkbookBlob() {
   const { from, to, rows } = reportRows();
-  const head = ['Date', 'Day', 'Emp Code', 'Name', 'Department', 'Punch In', 'Punch Out', 'Hours', 'Remarks'];
+  const hrs = m => m == null ? '' : +(m / 60).toFixed(2);
+  const head = ['Date', 'Day', 'Emp Code', 'Name', 'Department', 'Punch In', 'Punch Out', 'Lunch (min)', 'Other Breaks (min)',
+    'Official Work Out (min)', 'Break Details', 'Total Hours', 'Net Hours', 'Remarks'];
   const body = rows.map(r => {
-    const m = minsBetween(r.in, r.out);
+    const t = breakTotals(r);
     return [fmtDate(r.date), parseKey(r.date).toLocaleDateString('en-IN', { weekday: 'short' }), r.code || '', r.name, r.dept || '',
-      fmtTime(r.in), r.out ? fmtTime(r.out) : '', m == null ? '' : +(m / 60).toFixed(2),
-      !r.out ? (r.date === dateKey() ? 'Inside' : 'Missing punch out') : r.manualOut ? 'Out time entered manually' : ''];
+      fmtTime(r.in), r.out ? fmtTime(r.out) : '', t.lunch, t.other, t.official, breakText(r),
+      hrs(minsBetween(r.in, r.out)), hrs(netMins(r)), remarkOf(r)];
   });
   // per-employee summary
   const sum = new Map();
   rows.forEach(r => {
-    const s = sum.get(r.userId) || { code: r.code || '', name: r.name, dept: r.dept || '', days: new Set(), mins: 0, missing: 0 };
-    s.days.add(r.date); const m = minsBetween(r.in, r.out); if (m == null) s.missing++; else s.mins += m;
+    const s = sum.get(r.userId) || { code: r.code || '', name: r.name, dept: r.dept || '', days: new Set(), mins: 0, net: 0, lunch: 0, other: 0, official: 0, missing: 0 };
+    s.days.add(r.date);
+    const m = minsBetween(r.in, r.out);
+    if (m == null) s.missing++;
+    else { const t = breakTotals(r); s.mins += m; s.net += netMins(r); s.lunch += t.lunch; s.other += t.other; s.official += t.official; }
     sum.set(r.userId, s);
   });
   const sumRows = [...sum.values()].sort((a, b) => a.name.localeCompare(b.name))
-    .map(s => [s.code, s.name, s.dept, s.days.size, +(s.mins / 60).toFixed(2), s.missing]);
+    .map(s => [s.code, s.name, s.dept, s.days.size, hrs(s.mins), hrs(s.lunch), hrs(s.other), hrs(s.official), hrs(s.net), s.missing]);
   const base = `${reportTitle(from, to).replace(/\s+/g, '_')}`;
 
   if (window.XLSX) {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([[reportTitle(from, to)], [], head, ...body]);
-    ws['!cols'] = [12, 6, 10, 26, 16, 11, 11, 7, 24].map(w => ({ wch: w }));
+    ws['!cols'] = [12, 6, 10, 26, 16, 11, 11, 10, 12, 14, 48, 10, 10, 24].map(w => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, ws, 'Punches');
-    const ws2 = XLSX.utils.aoa_to_sheet([['Summary ' + reportTitle(from, to)], [], ['Emp Code', 'Name', 'Department', 'Days Present', 'Total Hours', 'Missing Punch Out'], ...sumRows]);
-    ws2['!cols'] = [10, 26, 16, 12, 12, 16].map(w => ({ wch: w }));
+    const ws2 = XLSX.utils.aoa_to_sheet([['Summary ' + reportTitle(from, to)], [], ['Emp Code', 'Name', 'Department', 'Days Present', 'Total Hours',
+      'Lunch Hours', 'Other Break Hours', 'Official Work Out Hours', 'Net Hours', 'Missing Punch Out'], ...sumRows]);
+    ws2['!cols'] = [10, 26, 16, 12, 12, 12, 16, 20, 10, 16].map(w => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
     const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     return { blob: new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), name: base + '.xlsx', from, to, rows };
@@ -641,10 +745,11 @@ $('#btnPrint').addEventListener('click', () => {
   const { from, to, rows } = reportRows();
   $('#printArea').innerHTML = `<h1>Office Attendance Register</h1>
     <div>${esc(reportTitle(from, to))} · Printed ${esc(new Date().toLocaleString('en-IN'))}${cfg.guard ? ' · ' + esc(cfg.guard) : ''}</div><br>
-    <table><thead><tr><th>#</th><th>Date</th><th>Emp Code</th><th>Name</th><th>Department</th><th>In</th><th>Out</th><th>Hours</th><th>Remarks</th></tr></thead>
+    <table><thead><tr><th>#</th><th>Date</th><th>Emp Code</th><th>Name</th><th>Department</th><th>In</th><th>Out</th><th>Breaks / lunch</th><th>Total</th><th>Net</th><th>Remarks</th></tr></thead>
     <tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td>${fmtDate(r.date)}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.dept)}</td>
-      <td>${fmtTime(r.in)}</td><td>${fmtTime(r.out)}</td><td>${fmtMins(minsBetween(r.in, r.out))}</td>
-      <td>${!r.out ? (r.date === dateKey() ? 'Inside' : 'Missing out') : r.manualOut ? 'Manual out' : ''}</td></tr>`).join('') || '<tr><td colspan="9">No punches</td></tr>'}</tbody></table>
+      <td>${fmtTime(r.in)}</td><td>${fmtTime(r.out)}</td><td class="brk">${esc(breakText(r).replace(/; /g, '\n')).replace(/\n/g, '<br>')}</td>
+      <td>${fmtMins(minsBetween(r.in, r.out))}</td><td>${fmtMins(netMins(r))}</td>
+      <td>${esc(remarkOf(r))}</td></tr>`).join('') || '<tr><td colspan="11">No punches</td></tr>'}</tbody></table>
     <div class="sign"><span>Security Guard: ____________________</span><span>Admin / HR: ____________________</span></div>`;
   window.print();
 });
@@ -1023,6 +1128,7 @@ function tick() {
   const now = new Date();
   $('#clock').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
   $('#clockDate').textContent = longDate(now);
+  if (now.getSeconds() === 0) renderInside(); // keep "away for N min" current
   if (dateKey(now) !== shownDay) { // midnight rollover
     if ($('#regDate').value === shownDay) $('#regDate').value = dateKey(now);
     shownDay = dateKey(now); selectedId = null; renderAll();
